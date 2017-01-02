@@ -28,6 +28,9 @@ class UiCurses:
         curses.wrapper(self._jam)
 
     def _jam(self, stdscr):
+        stdscr.keypad(True)
+        stdscr.scrollok(True)
+
         self.stdscr = stdscr
         ch = stdscr.getkey()
         command = self.keymap.get(ch)
@@ -35,8 +38,11 @@ class UiCurses:
         while command != "quit":
             if command is not None:
                 self.commands.execute(command, ui=self)
+            else:
+                self.puts("Unknown key: '{}' (len:{})".format(ch, len(ch)))
             ch = stdscr.getkey()
             command = self.keymap.get(ch)
+        self.commands.do_panic()
 
     def puts(self, something):
         self.stdscr.addstr(something)

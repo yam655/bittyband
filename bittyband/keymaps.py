@@ -4,15 +4,21 @@ __all__ = ["KeyMaps"]
 
 from .config import ConfigError
 import sys
+import unicodedata
 
 class KeyMaps:
     keymap = None
     def __init__(self, config):
         self.keymap = self.map_keys(config)
 
+    def test(self):
+        sys.stdout.write(repr(self.keymap))
+
     def map_keys(self, config):
         keymap = {}
         for value in config["keymap"].keys():
+            if value in config["DEFAULT"]:
+                continue
             ks = config["keymap"][value].strip()
             keys = []
             if ks == "":
@@ -26,10 +32,10 @@ class KeyMaps:
             else:
                 keys = ks
             if isinstance(keys, str):
-                keymap[keys] = expand_unicode(value)
+                keymap[expand_unicode(keys)] = value
             else:
                 for key in keys:
-                    keymap[key] = expand_unicode(value)
+                    keymap[expand_unicode(key)] = value
         return keymap
 
 def expand_unicode(s):

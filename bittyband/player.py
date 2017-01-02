@@ -37,11 +37,15 @@ class PushButtonPlayer:
 
     def player(self):
         with mido.open_output(self.portname) as output:
+            output.send(Message('stop'))
+            output.send(Message('reset'))
             while True:
                 message = self.queue.get()
                 if message is None:
                     break
                 output.send(message)
+                self.queue.task_done()
+            output.send(Message('reset'))
         self.thread = None
 
     def feed_midi(self, what, ui=None):

@@ -6,13 +6,18 @@ from .player import PushButtonPlayer
 from .ui import get_ui
 
 def app(config):
-    keymap = KeyMaps(config)
+    keymaps = KeyMaps(config)
     pbplayer = PushButtonPlayer(config)
     ui_maker = get_ui()
     cmds = Commands(config, pbplayer)
-    ui = ui_maker(config, keymap, cmds)
+    ui = ui_maker(config, keymaps, cmds)
 
     if config["project"]["mode"] != "test":
         pbplayer.open()
-        ui.jam()
+        try:
+            ui.jam()
+        finally:
+            pbplayer.close()
+    else:
+        keymaps.test()
 

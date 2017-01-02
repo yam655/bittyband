@@ -25,6 +25,7 @@ class Commands:
     scale = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
     active_preset = None 
     lead_note = None
+    pad_note = None
     key_note = 60
 
     def __init__(self, config, player):
@@ -45,9 +46,9 @@ class Commands:
         global LEAD_CHANNEL
         global PAD_CHANNEL
         if "key" in self.config[what]:
-            key_note = self.config[what]["key"]
+            self.key_note = int(self.config[what]["key"])
         if "scale" in self.config[what]:
-            scale = parse_scale(self.config[what]["scale"].strip())
+            self.scale = parse_scale(self.config[what]["scale"].strip())
         if "lead_instrument" in self.config[what]:
             self.player.feed_midi(Message('program_change', channel=LEAD_CHANNEL,
                             program=int(self.config[what]["lead_instrument"])))
@@ -60,12 +61,17 @@ class Commands:
 
     def set_lead_note(self, note = None): 
         if self.lead_note is not None:
-            self.player.feed_midi(Message('note_off', note=self.lead_note,
-channel=LEAD_CHANNEL), ui=self.ui)
+            self.player.feed_midi(Message('note_off', note=self.lead_note, channel=LEAD_CHANNEL))
         if note is not None:
-            self.player.feed_midi(Message('note_on', note=note,
-channel=LEAD_CHANNEL), ui=self.ui)
+            self.player.feed_midi(Message('note_on', note=note, channel=LEAD_CHANNEL))
         self.lead_note=note
+        if self.ui is not None:
+            self.ui.puts("Note: {}".format(note))
+
+    def do_panic(self):
+        for channel in range(0,16):
+            for note in range(0,128):
+                self.player.feed_midi(Message('note_off', note=note, channel=channel))
 
     def set_pad_note(self, note = None): 
         if self.pad_note is not None:
@@ -82,6 +88,13 @@ channel=LEAD_CHANNEL), ui=self.ui)
         if note is not None:
             self.set_lead_note(note)
 
+    def do_silence(self, what):
+        self.set_lead_note()
+        self.set_pad_note()
+
+    def do_rest(self, what):
+        self.set_lead_note()
+
     def do_note_key(self, what):
         global key_note
         self.set_lead_note(self.key_note)
@@ -90,7 +103,7 @@ channel=LEAD_CHANNEL), ui=self.ui)
         self.set_lead_note()
         self.set_pad_note()
         # marks MIDI stream (quite crappy/poorly supported)
-        self.do_preset(self.active_preset, player)
+        self.do_preset(self.active_preset)
 
     def do_mark_bad(self, what):
         self.set_lead_note()
@@ -100,7 +113,7 @@ channel=LEAD_CHANNEL), ui=self.ui)
 
     def do_next(self, what):
         self.do_mark_good(what)
-        # self.do_chord_next(what, player)
+        # self.do_chord_next(what)
 
 action_mapping = {
 "quit": Commands.do_nothing, # handled in the loop
@@ -153,6 +166,8 @@ action_mapping = {
 # "chord_2": Commands.do_chord_2,
 # "chord_1": Commands.do_chord_1,
 # "chord_0": Commands.do_chord_0, 
+"rest": Commands.do_rest,
+"silence": Commands.do_silence,
 }
 
 

@@ -8,7 +8,7 @@ from pathlib import Path
 import sys
 
 """ The sum total of the built-in, user and project configuration """
-config = ConfigParser()
+config = ConfigParser(inline_comment_prefixes=None)
 """ The active project's base directory """
 project_dir = None
 
@@ -94,13 +94,14 @@ pad_sequence = I7-I7-I7-I7-IV7-IV7-I7-I7-V7-IV7-I7-V7
 scale = rel: 1 b3 3 5 #5 7
 
 [preset_9]
-key = 60 # MIDI standard C4
+# MIDI standard C4
+key = 6
 scale = rel: 1 2 3 4 5 6 7
 
 
 [keymap]
 quit = (^[,KEY_ESCAPE,\N{escape})
-note_blip = "'"
+note_blip = "`"
 preset_0 = 0
 preset_1 = 1
 preset_2 = 2
@@ -136,7 +137,6 @@ note_steps+3 = h
 note_steps+4 = j
 note_steps+5 = k
 note_steps+6 = l
-# ??? = ";"
 next = (^M,^J,\N{line feed},\N{carriage return},KEY_ENTER)
 
 note_steps+7 = z
@@ -149,6 +149,9 @@ chord_3 = "m"
 chord_2 = ","
 chord_1 = "."
 chord_0 = "/"
+
+rest = " "
+silence = ";"
 
 """
 
