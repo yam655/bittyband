@@ -6,6 +6,7 @@ import sys
 from mido import Message
 
 from .config import ConfigError
+from .midinames import getLyForMidiNote
 
 import locale
 locale.setlocale(locale.LC_ALL, '')
@@ -45,6 +46,9 @@ class Commands:
     def do_preset(self, what):
         global LEAD_CHANNEL
         global PAD_CHANNEL
+        if what is None:
+            return
+
         if "key" in self.config[what]:
             self.key_note = int(self.config[what]["key"])
         if "scale" in self.config[what]:
@@ -55,9 +59,12 @@ class Commands:
         if "pad_instrument" in self.config[what]:
             self.player.feed_midi(Message('program_change', channel=PAD_CHANNEL,
                             program=int(self.config[what]["pad_instrument"])))
-        active_preset=what
+        self.active_preset=what
         if self.ui is not None:
-            self.ui.puts("Preset Setting to " + what)
+            if self.config[what]["title"]:
+                self.ui.putln("Preset Setting to: {}".format(self.config[what]["title"]))
+            else:
+                self.ui.putln("Preset Setting to: {}".format(what))
 
     def set_lead_note(self, note = None): 
         if self.lead_note is not None:
@@ -66,9 +73,10 @@ class Commands:
             self.player.feed_midi(Message('note_on', note=note, channel=LEAD_CHANNEL))
         self.lead_note=note
         if self.ui is not None:
-            self.ui.puts("Note: {}".format(note))
+            self.ui.puts("{}".format(getLyForMidiNote(note)))
 
     def do_panic(self):
+        self.ui.puts("PANIC ")
         for channel in range(0,16):
             for note in range(0,128):
                 self.player.feed_midi(Message('note_off', note=note, channel=channel))

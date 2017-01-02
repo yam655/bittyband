@@ -39,12 +39,16 @@ class UiCurses:
             if command is not None:
                 self.commands.execute(command, ui=self)
             else:
-                self.puts("Unknown key: '{}' (len:{})".format(ch, len(ch)))
+                self.putln("Unknown key: '{}' (len:{})".format(ch, len(ch)))
             ch = stdscr.getkey()
             command = self.keymap.get(ch)
         self.commands.do_panic()
 
     def puts(self, something):
+        self.stdscr.addstr(something)
+        self.stdscr.refresh()
+
+    def putln(self, something):
         self.stdscr.addstr(something)
         self.stdscr.addstr("\n")
         self.stdscr.refresh()

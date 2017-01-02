@@ -55,48 +55,59 @@ pad_sequence = I-vi-IV-V
 pad_chords = 1 3 5
 
 [preset_0]
+title = G Major with Trumpet
 
 [preset_1]
 # pragmatic C4
 key = 72
 # Major scale
 # scale = rel: 1 2 3 4 5 6 7
+title = C5 Major
 
 [preset_2]
 # MIDI standard G4
 key = 67
 # Major scale
 scale = rel: 1 2 3 4 5 6 7
+title = G4 Major
 
 [preset_3]
 # https://en.wikipedia.org/wiki/Acoustic_scale
 scale = rel: 1 2 3 #4 5 6 b7
+title = G Acoustic Scale
 
 [preset_4]
 # Aeolian mode or natural minor scale
 scale = rel: 1 2 b3 4 5 b6 b7 
+title = G Natural Minor
 
 [preset_5]
 # Yo scale
 scale = rel:  1 b3 4 5 b7
+title = G Yo scale
 
 [preset_6]
 # Prometheus scale
 scale = rel:  1 2 3 #4 6 b7 
+title = G Prometheus
 
 [preset_7]
 # Blues scale
 scale = rel:  1 b3 4 b5 5 b7 
+title = G Blues
 # 12 Bar Blues
 pad_sequence = I7-I7-I7-I7-IV7-IV7-I7-I7-V7-IV7-I7-V7
 
 [preset_8]
-scale = rel: 1 b3 3 5 #5 7
+title = G Major alternate instrument
+lead_instrument = 83
+pad_instrument = 57
 
 [preset_9]
 # MIDI standard C4
-key = 6
+key = 60
 scale = rel: 1 2 3 4 5 6 7
+title = C4 Major
 
 
 [keymap]

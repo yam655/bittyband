@@ -1,13 +1,161 @@
 #!/usr/bin/env python3
 
-__all__ = ["getMidiInstrumentNumber", "getMidiInstrumentName"]
+__all__ = [ "getMidiInstrumentNumber", "getMidiInstrumentName",
+            "getLyForMidiNote"]
 
 def getMidiInstrumentNumber(s):
+    global midiInstrumentNumbers
     return midiInstrumentNumbers.get(s)
 
 def getMidiInstrumentName(n):
+    global midiInstrumentNames
     return midiInstrumentNames.get(n)
 
+def getLyForMidiNote(n):
+    global lyForMidiNote
+    return lyForMidiNote.get(n)
+
+lyForMidiNote = { 
+ 0: "c,,,, ",
+ 1: "cis,,,, ",
+ 2: "d,,,, ",
+ 3: "dis,,,, ",
+ 4: "e,,,, ",
+ 5: "f,,,, ",
+ 6: "fis,,,, ",
+ 7: "g,,,, ",
+ 8: "gis,,,, ",
+ 9: "a,,,, ",
+10: "ais,,,, ",
+11: "b,,,, ", 
+
+12: "c,,, ",
+13: "cis,,, ",
+14: "d,,, ",
+15: "dis,,, ",
+16: "e,,, ",
+17: "f,,, ",
+18: "fis,,, ",
+19: "g,,, ",
+20: "gis,,, ",
+21: "a,,, ",
+22: "ais,,, ",
+23: "b,,, ", 
+
+24: "c,, ",
+25: "cis,, ",
+26: "d,, ",
+27: "dis,, ",
+28: "e,, ",
+29: "f,, ",
+30: "fis,, ",
+31: "g,, ",
+32: "gis,, ",
+33: "a,, ",
+34: "ais,, ",
+35: "b,, ", 
+
+36: "c, ",
+37: "cis, ",
+38: "d, ",
+39: "dis, ",
+40: "e, ",
+41: "f, ",
+42: "fis, ",
+43: "g, ",
+44: "gis, ",
+45: "a, ",
+46: "ais, ",
+47: "b, ", 
+
+48: "c ",
+49: "cis ",
+50: "d ",
+51: "dis ",
+52: "e ",
+53: "f ",
+54: "fis ",
+55: "g ",
+56: "gis ",
+57: "a ",
+58: "ais ",
+59: "b ", 
+
+60: "c' ",
+61: "cis' ",
+62: "d' ",
+63: "dis' ",
+64: "e' ",
+65: "f' ",
+66: "fis' ",
+67: "g' ",
+68: "gis' ",
+69: "a' ",
+70: "ais' ",
+71: "b' ", 
+
+72: "c'' ",
+73: "cis'' ",
+74: "d'' ",
+75: "dis'' ",
+76: "e'' ",
+77: "f'' ",
+78: "fis'' ",
+79: "g'' ",
+80: "gis'' ",
+81: "a'' ",
+82: "ais'' ",
+83: "b'' ", 
+
+84: "c''' ",
+85: "cis''' ",
+86: "d''' ",
+87: "dis''' ",
+88: "e''' ",
+89: "f''' ",
+90: "fis''' ",
+91: "g''' ",
+92: "gis''' ",
+93: "a''' ",
+94: "ais''' ",
+95: "b''' ", 
+
+ 96: "c'''' ",
+ 97: "cis'''' ",
+ 98: "d'''' ",
+ 99: "dis'''' ",
+100: "e'''' ",
+101: "f'''' ",
+102: "fis'''' ",
+103: "g'''' ",
+104: "gis'''' ",
+105: "a'''' ",
+106: "ais'''' ",
+107: "b'''' ", 
+
+108: "c''''' ",
+109: "cis''''' ",
+110: "d''''' ",
+111: "dis''''' ",
+112: "e''''' ",
+113: "f''''' ",
+114: "fis''''' ",
+115: "g''''' ",
+116: "gis''''' ",
+117: "a''''' ",
+118: "ais''''' ",
+119: "b''''' ", 
+
+120: "c'''''' ",
+121: "cis'''''' ",
+122: "d'''''' ",
+123: "dis'''''' ",
+124: "e'''''' ",
+125: "f'''''' ",
+126: "fis'''''' ",
+127: "g'''''' ",
+
+}
 
 midiInstrumentNames = {
 1: "Acoustic Grand Piano",
