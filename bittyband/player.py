@@ -20,17 +20,17 @@ class PushButtonPlayer:
         self.ui = None
 
     def __del__(self):
-        self.close()
+        self.end()
 
     def reconfigure(self, config):
         self.portname = config["project"].get("portname")
 
-    def open(self):
+    def start(self):
         if self.thread is None:
             self.thread = threading.Thread(target=self.player)
             self.thread.start()
 
-    def close(self):
+    def end(self):
         if self.queue is not None and self.thread is not None:
             self.queue.join()
             self.queue.put(None)
@@ -47,8 +47,10 @@ class PushButtonPlayer:
                 self.queue.task_done()
             output.send(Message('reset'))
         self.thread = None
+        self.queue = None
 
     def feed_midi(self, what, ui=None):
         self.ui = ui
-        self.queue.put(what)
+        if self.queue is not None:
+            self.queue.put(what)
 

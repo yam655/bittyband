@@ -32,9 +32,9 @@ def parse(argv):
             sys.exit(0)
     config = load_project_config(args)
     if hasattr(args,"mode"):
-        config["project"]["mode"] = args.mode
+        config["instance"]["mode"] = args.mode
     else:
-        config["project"]["mode"] = ""
+        config["instance"]["mode"] = ""
     return config
 
 default_config = r"""
@@ -191,6 +191,8 @@ def load_home_config(args = None):
             config.read(home_config)
             if "project" in config:
                 config["project"].clear()
+            if "instance" in config:
+                config["instance"].clear()
     return config
 
 class ConfigError(Exception):
@@ -252,6 +254,8 @@ def load_project_config(args = None):
     global config
 
     load_home_config(args)
+    if "instance" not in config:
+        config.add_section("instance")
     project_dir = find_project_dir(args.project)
     conf_path = project_dir / "bittyband.conf"
     if not conf_path.exists():
@@ -260,7 +264,8 @@ def load_project_config(args = None):
     if config["project"].getint("version") < 1:
         raise ConfigError("Project is an unsupported version.")
     if args.midiport is not None:
-        config["project"]["midiport"] = args.midiport
+        config["instance"]["midiport"] = args.midiport
+    config["instance"]["project_dir"] = str(project_dir)
     return config
 
 project_stub = """

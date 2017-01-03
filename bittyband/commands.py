@@ -62,9 +62,9 @@ class Commands:
         self.active_preset=what
         if self.ui is not None:
             if self.config[what]["title"]:
-                self.ui.putln("Preset Setting to: {}".format(self.config[what]["title"]))
+                self.ui.putln("\nPreset Setting to: {}".format(self.config[what]["title"]))
             else:
-                self.ui.putln("Preset Setting to: {}".format(what))
+                self.ui.putln("\nPreset Setting to: {}".format(what))
 
     def set_lead_note(self, note = None): 
         if self.lead_note is not None:
@@ -73,10 +73,13 @@ class Commands:
             self.player.feed_midi(Message('note_on', note=note, channel=LEAD_CHANNEL))
         self.lead_note=note
         if self.ui is not None:
-            self.ui.puts("{}".format(getLyForMidiNote(note)))
+            if note is None:
+                self.ui.puts("r ".format(getLyForMidiNote(note)))
+            else:
+                self.ui.puts("{}".format(getLyForMidiNote(note)))
 
     def do_panic(self):
-        self.ui.puts("PANIC ")
+        self.ui.puts("\nPANIC ")
         for channel in range(0,16):
             for note in range(0,128):
                 self.player.feed_midi(Message('note_off', note=note, channel=channel))

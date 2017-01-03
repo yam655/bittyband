@@ -4,39 +4,48 @@ import queue
 from pathlib import Path
 import threading
 from datetime import datetime, timedelta 
+import time
+from time import time,perf_counter
 
 import sys
 
-FILE_ID = "#,audio/x-vnd.mrbeany.record : v1 : "
+FILE_ID = "#,audio/vnd.mrbeany.bittyband.stream : v1\n"
 
 class CommandRecorder:
     """ Internal Command Recorder (for jam mode) """
-    def __init__(self, config, project_dir):
-        self.fname = find_next_name(Path(project_dir), "cmd-{}.stream.txt")
+    def __init__(self, config):
+        project_dir = Path(config["instance"]["project_dir"])
+        self.fname = self.find_next_name(project_dir, "cmd-{}.stream.txt")
         self.queue = queue.Queue() 
         self.thread = None
 
-    def open(self):
+    def start(self):
         self.thread = threading.Thread(target=self.writer)
         self.thread.start()
 
     def writer(self):
-        with open(self.fname, "at") as out:
-            out.write(" : {}\n".format(strftime("%Y-%m-%dT%H:%M:%SZ", gmtime())))
+        global FILE_ID
+        with open(self.fname, "wt") as out:
+            out.write(FILE_ID)
             while True:
+                if self.queue.empty():
+                    out.flush()
                 item = self.queue.get()
                 if item is None:
                     break
                 out.write(item)
                 out.write("\n")
+                self.queue.task_done()
+        self.queue = None
+        self.thread = None
 
-    def close(self):
+    def end(self):
         if self.queue is not None and self.thread is not None:
             self.queue.join()
             self.queue.put(None)
 
     def find_next_name(self, project_dir, basenm):
-        tme = str(time.time())
+        tme = str(time())
         t = project_dir / basenm.format(tme)
         idx = 1
         while t.exists():
@@ -46,10 +55,12 @@ class CommandRecorder:
         return str(t)
 
     def add(self, what):
-        self.queue.put("{}\t{}".format(perf_counter(),ch))
+        if self.queue is not None:
+            self.queue.put("{},{}".format(perf_counter(),what))
 
     def __del__(self):
-        self.close()
+        if hasattr(self, "queue"):
+            self.end()
 
     def read(self):
         line = sys.stdin.readline()
@@ -71,8 +82,7 @@ class CommandRecorder:
             if len(v) == 1:
                 v = ord(v)
             if t is not None:
-                global queues
-                queues.conductor.put((t, v))
+                self.queue.put((t, v))
             line = sys.stdin.readline()
             line=line[:-1]
 
