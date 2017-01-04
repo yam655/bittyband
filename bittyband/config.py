@@ -24,9 +24,8 @@ def parse(argv):
     global config
     global parser
     if len(argv) == 0:
-        args = parser.parse_args(["gui"])
-    else:
-        args = parser.parse_args(argv)
+        argv = ["gui"]
+    args = parser.parse_args(argv)
     if hasattr(args,"func"):
         if args.func(args):
             sys.exit(0)
@@ -34,7 +33,7 @@ def parse(argv):
     if hasattr(args,"mode"):
         config["instance"]["mode"] = args.mode
     else:
-        config["instance"]["mode"] = ""
+        config["instance"]["mode"] = "gui"
     return config
 
 default_config = r"""
@@ -295,6 +294,8 @@ parser_create.add_argument("project", help="Name of project directory to create.
 parser_create.set_defaults(func=create, mode="func")
 parser_gui = subparsers.add_parser("gui", description="Start the GUI")
 parser_gui.set_defaults(mode="gui")
+parser_list = subparsers.add_parser("list", description="List snippets")
+parser_list.set_defaults(mode="list")
 parser_test = subparsers.add_parser("test", description="Perform some internal tests")
 parser_test.set_defaults(mode="test")
 

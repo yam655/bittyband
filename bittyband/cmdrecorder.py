@@ -15,7 +15,7 @@ class CommandRecorder:
     """ Internal Command Recorder (for jam mode) """
     def __init__(self, config):
         project_dir = Path(config["instance"]["project_dir"])
-        self.fname = self.find_next_name(project_dir, "cmd-{}.stream.txt")
+        self.fname = self.find_next_name(project_dir, "cmd-{}.stream")
         self.queue = queue.Queue() 
         self.thread = None
 

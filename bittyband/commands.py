@@ -7,6 +7,7 @@ from mido import Message
 
 from .config import ConfigError
 from .midinames import getLyForMidiNote
+import time
 
 import locale
 locale.setlocale(locale.LC_ALL, '')
@@ -28,10 +29,15 @@ class Commands:
     lead_note = None
     pad_note = None
     key_note = 60
+    pad_instrument = 0
+    lead_instrument = 0
+    ui = None
+    message_time = 0
 
-    def __init__(self, config, player):
+    def __init__(self, config, player, cmdrecorder):
         self.config = config
         self.player = player
+        self.cmdrecorder = cmdrecorder
 
     def execute(self, cmd, ui=None):
         global action_mapping
@@ -39,6 +45,31 @@ class Commands:
         action = action_mapping.get(cmd)
         if action is not None:
             action(self, cmd)
+
+    def play(self, material, realtime=True):
+        global action_mapping
+        start = None
+        end = None
+        for line in material:
+            if line[0] in "# \t":
+                continue
+            p = line.split(",",1)
+            cmd = p[-1]
+            end = float(p[0])
+            if start is not None:
+                s = (end-start)
+                if s > 0:
+#                   self.message_time = int(s * 1000000)
+                    self.message_time = int(s * 1000)
+                    if realtime:
+                        time.sleep(s)
+            if cmd[0] == "!":
+                continue
+            action = action_mapping.get(cmd)
+            if action is not None:
+                action(self, cmd)
+            start = end
+        self.do_silence("silence")
 
     def do_nothing(self, what):
         pass
@@ -49,28 +80,45 @@ class Commands:
         if what is None:
             return
 
-        if "key" in self.config[what]:
-            self.key_note = int(self.config[what]["key"])
-        if "scale" in self.config[what]:
-            self.scale = parse_scale(self.config[what]["scale"].strip())
-        if "lead_instrument" in self.config[what]:
-            self.player.feed_midi(Message('program_change', channel=LEAD_CHANNEL,
-                            program=int(self.config[what]["lead_instrument"])))
-        if "pad_instrument" in self.config[what]:
-            self.player.feed_midi(Message('program_change', channel=PAD_CHANNEL,
-                            program=int(self.config[what]["pad_instrument"])))
-        self.active_preset=what
+        title = self.config[what]["title"]
         if self.ui is not None:
-            if self.config[what]["title"]:
-                self.ui.putln("\nPreset Setting to: {}".format(self.config[what]["title"]))
+            if title is not None:
+                self.ui.putln("\nPreset Setting to: {}".format(title))
+                if self.cmdrecorder is not None:
+                    self.cmdrecorder.add("!set title={}".format(title))
             else:
                 self.ui.putln("\nPreset Setting to: {}".format(what))
 
+        if "key" in self.config[what]:
+            self.key_note = int(self.config[what]["key"])
+        if self.cmdrecorder is not None:
+            self.cmdrecorder.add("!set key={0!r}".format(self.key_note))
+        if "scale" in self.config[what]:
+            self.scale = parse_scale(self.config[what]["scale"].strip())
+        if self.cmdrecorder is not None:
+            self.cmdrecorder.add("!set scale={0!r}".format(self.scale))
+        if "lead_instrument" in self.config[what]:
+            self.lead_instrument = int(self.config[what]["lead_instrument"])
+        else:
+            self.lead_instrument = 0
+        self.player.feed_midi(Message('program_change', channel=LEAD_CHANNEL,
+                            program=self.lead_instrument, time=self.message_time))
+        if self.cmdrecorder is not None:
+            self.cmdrecorder.add("!set lead_instrument={0!r}".format(self.lead_instrument))
+        if "pad_instrument" in self.config[what]:
+            self.pad_instrument=int(self.config[what]["pad_instrument"])
+            self.player.feed_midi(Message('program_change', channel=PAD_CHANNEL,
+                            program=self.pad_instrument, time=0))
+        if self.cmdrecorder is not None:
+            self.cmdrecorder.add("!set pad_instrument={0!r}".format(self.pad_instrument))
+        self.active_preset=what
+
     def set_lead_note(self, note = None): 
         if self.lead_note is not None:
-            self.player.feed_midi(Message('note_off', note=self.lead_note, channel=LEAD_CHANNEL))
+            self.player.feed_midi(Message('note_off', note=self.lead_note, channel=LEAD_CHANNEL, time=self.message_time))
+            self.message_time = 0
         if note is not None:
-            self.player.feed_midi(Message('note_on', note=note, channel=LEAD_CHANNEL))
+            self.player.feed_midi(Message('note_on', note=note, channel=LEAD_CHANNEL, time=self.message_time))
         self.lead_note=note
         if self.ui is not None:
             if note is None:
@@ -82,13 +130,15 @@ class Commands:
         self.ui.puts("\nPANIC ")
         for channel in range(0,16):
             for note in range(0,128):
-                self.player.feed_midi(Message('note_off', note=note, channel=channel))
+                self.player.feed_midi(Message('note_off', note=note, channel=channel, time=self.message_time))
+                self.message_time = 0
 
     def set_pad_note(self, note = None): 
         if self.pad_note is not None:
-            self.player.feed_midi(Message('note_off', note=self.pad_note, channel=PAD_CHANNEL))
+            self.player.feed_midi(Message('note_off', note=self.pad_note, channel=PAD_CHANNEL, time=self.message_time))
+            self.message_time = 0
         if note is not None:
-            self.player.feed_midi(Message('note_on', note=note, channel=PAD_CHANNEL))
+            self.player.feed_midi(Message('note_on', note=note, channel=PAD_CHANNEL, time=self.message_time))
         self.pad_note=note
 
     def do_note_blip(self, what):
@@ -101,6 +151,7 @@ class Commands:
 
     def do_silence(self, what):
         self.set_lead_note()
+        self.message_time = 0
         self.set_pad_note()
 
     def do_rest(self, what):
@@ -112,12 +163,14 @@ class Commands:
 
     def do_mark_good(self, what):
         self.set_lead_note()
+        self.message_time = 0
         self.set_pad_note()
         # marks MIDI stream (quite crappy/poorly supported)
         self.do_preset(self.active_preset)
 
     def do_mark_bad(self, what):
         self.set_lead_note()
+        self.message_time = 0
         self.set_pad_note()
         # marks MIDI stream (quite crappy/poorly supported)
         self.do_preset(self.active_preset)

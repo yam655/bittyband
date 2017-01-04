@@ -12,7 +12,7 @@ class KeyMaps:
         self.keymap = self.map_keys(config)
 
     def test(self):
-        sys.stdout.write(repr(self.keymap))
+        pass
 
     def map_keys(self, config):
         keymap = {}
