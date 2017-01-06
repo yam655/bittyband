@@ -57,8 +57,8 @@ class Lister:
         cmds.play(self.get(what), realtime=False)
         exporter.end()
 
-    def export_ly(self, what, output):
-        exporter = ExportLy(self.config, output)
+    def export_ly(self, what, output, title=""):
+        exporter = ExportLy(self.config, output, title=title)
         cmds = Commands(self.config, exporter, None)
         exporter.start()
         cmds.play(self.get(what), realtime=False)

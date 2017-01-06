@@ -105,7 +105,7 @@ class UiCurses:
                 filenm = self.read_string("Export to MIDI:")
                 self.stdscr.addstr(line, 0, "E")
                 self.stdscr.refresh()
-                if filenm is not None or len(filenm).strip() > 0:
+                if filenm is not None and len(filenm.strip()) > 0:
                     markbit = self.lister.get_order()[line]
                     mark = self.lister.get_mark(markbit)
                     if filenm == "." or filenm == "-":
@@ -117,11 +117,11 @@ class UiCurses:
                 filenm = self.read_string("Export to Lilypond:")
                 self.stdscr.addstr(line, 0, "E")
                 self.stdscr.refresh()
-                if filenm is not None or len(filenm).strip() > 0:
+                if filenm is not None and len(filenm.strip()) > 0:
                     markbit = self.lister.get_order()[line]
                     mark = self.lister.get_mark(markbit)
                     if filenm == "." or filenm == "-":
-                        self.lister.export_ly(markbit, self.project_dir / "{}.ly".format(mark.get("title","export"), title=mark.get("title","Untitled")))
+                        self.lister.export_ly(markbit, self.project_dir / "{}.ly".format(mark.get("title","export")), title=mark.get("title","Untitled"))
                     else:
                         self.lister.export_ly(markbit, self.project_dir / filenm)
                 self.display_list()
@@ -138,19 +138,19 @@ class UiCurses:
         stdscr.scrollok(True)
 
         self.stdscr = stdscr
-        ch = stdscr.getkey()
-        command = self.keymap.get(ch)
+        ch = ""
+        command = ""
         self.cmdrecorder.add("mark_good")
         first_preset = "preset_0"
         self.commands.execute(first_preset, ui=self)
         self.cmdrecorder.add(first_preset)
 
         while command != "quit":
-            if command is not None:
+            if command is None:
+                self.putln("Unknown key: '{}' (len:{})".format(ch, len(ch)))
+            elif command != "":
                 self.cmdrecorder.add(command)
                 self.commands.execute(command, ui=self)
-            else:
-                self.putln("Unknown key: '{}' (len:{})".format(ch, len(ch)))
             ch = stdscr.getkey()
             command = self.keymap.get(ch)
         self.commands.do_silence("silence")

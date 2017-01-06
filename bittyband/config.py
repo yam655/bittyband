@@ -51,7 +51,7 @@ pad_instrument = 83
 pad_mode = serial-chord
 # 50s progression
 pad_sequence = I-vi-IV-V
-pad_chords = 1 3 5
+pad_chords = <1 3 5> :m<1 m3 5> :7<1 3 5 7> (i iv v)<1 m3 5> 
 
 [preset_0]
 title = G Major with Trumpet
@@ -147,6 +147,7 @@ note_steps+3 = h
 note_steps+4 = j
 note_steps+5 = k
 note_steps+6 = l
+octave_up = "'"
 next = (^M,^J,\N{line feed},\N{carriage return},KEY_ENTER)
 
 note_steps+7 = z
@@ -155,13 +156,12 @@ note_steps+9 = c
 note_steps+10 = v
 note_steps+11 = b
 note_steps+12 = n
-chord_3 = "m"
-chord_2 = ","
-chord_1 = "."
-chord_0 = "/"
+silence = "m"
+octave_down = ","
+# chord_1 = "."
+# chord_0 = "/"
 
 rest = " "
-silence = ";"
 
 """
 

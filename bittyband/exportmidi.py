@@ -32,6 +32,17 @@ class ExportMidi:
     def player(self):
         pass
 
-    def feed_midi(self, what, ui=None):
-        self.track.append(what)
+    def feed_comment(self, cmt, **kwargs):
+        pass
+    def feed_other(self, cmd, **kwargs):
+        pass
+    def sync_comment(self, cmt, **kwargs):
+        pass
+
+    def feed_midi(self, *what, ui=None, abbr=None, channel=None, time=None): 
+        for w in what: 
+            if time is not None:
+                w.time = time
+                time = None 
+            self.track.append(w)
 
