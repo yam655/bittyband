@@ -6,15 +6,15 @@ from configparser import ConfigParser
 import argparse
 from pathlib import Path
 import sys
+from .errors import ConfigError
+
+from .player import PushButtonPlayer
+from .commands import Commands
 
 """ The sum total of the built-in, user and project configuration """
 config = ConfigParser(inline_comment_prefixes=None)
 """ The active project's base directory """
 project_dir = None
-
-def get_config():
-    global config
-    return config
 
 def get_project_dir():
     global project_dir
@@ -46,8 +46,8 @@ scale = rel: 1 2 3 4 5 6 7
 lead_instrument = 57
 lead_mode = serial-note
 lead_chords = 1 3 5
-# 83:"Lead 3 (calliope)",
-pad_instrument = 83
+# 50:"String Ensemble 2",
+pad_instrument = 50
 pad_mode = serial-chord
 # 50s progression
 pad_sequence = I-vi-IV-V
@@ -157,11 +157,13 @@ note_steps+10 = v
 note_steps+11 = b
 note_steps+12 = n
 silence = "m"
-octave_down = ","
-# chord_1 = "."
-# chord_0 = "/"
-
 rest = " "
+
+octave_down = ","
+play_pause = "."
+rewind = "<"
+menu = "/"
+
 
 """
 
@@ -193,9 +195,6 @@ def load_home_config(args = None):
             if "instance" in config:
                 config["instance"].clear()
     return config
-
-class ConfigError(Exception):
-    pass
 
 def get_project_root():
     """ Return the common base-directory for projects.
@@ -281,6 +280,16 @@ def create(args):
     conf_path.write_text(project_stub)
     return True
 
+def panic(args):
+    pbplayer = PushButtonPlayer(config)
+    pbplayer.start()
+    cmds = Commands(config, pbplayer, None, None)
+    try:
+        cmds.do_panic()
+    finally:
+        pbplayer.end()
+    return True
+
 parser.add_argument("--user-config", metavar="DIR", dest="user_config",
         help="Specify an alternate user configuration directory")
 parser.add_argument("-p", "--project", metavar="PROJ",
@@ -298,4 +307,6 @@ parser_list = subparsers.add_parser("list", description="List snippets")
 parser_list.set_defaults(mode="list")
 parser_test = subparsers.add_parser("test", description="Perform some internal tests")
 parser_test.set_defaults(mode="test")
+parser_test = subparsers.add_parser("panic", description="Perform a MIDI Panic and clear all notes.")
+parser_test.set_defaults(func=panic, mode="panic")
 

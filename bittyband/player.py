@@ -23,7 +23,9 @@ class PushButtonPlayer:
         self.end()
 
     def reconfigure(self, config):
-        self.portname = config["project"].get("portname")
+        self.midiport = None
+        if "project" in config:
+            self.midiport = config["instance"].get("midiport")
 
     def start(self):
         if self.thread is None:
@@ -36,7 +38,7 @@ class PushButtonPlayer:
             self.queue.put(None)
 
     def player(self):
-        with mido.open_output(self.portname) as output:
+        with mido.open_output(self.midiport) as output:
             while True:
                 message = self.queue.get()
                 if message is None:

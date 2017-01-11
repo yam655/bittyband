@@ -3,9 +3,9 @@
 __all__ = ["Commands", "LEAD_CHANNEL", "PAD_CHANNEL"]
 
 import sys
-from mido import Message
+from mido import Message, bpm2tempo
 
-from .config import ConfigError
+from .errors import ConfigError
 from .midinames import getLyForMidiNote
 import time
 
@@ -16,7 +16,9 @@ code = locale.getpreferredencoding()
 OCTAVE_STEPS = 12
 LEAD_CHANNEL = 0
 PAD_CHANNEL = 1
+DRUM_CHANNEL = 9
 
+PAD_VELOCITY = 32
 
 class Commands:
     config = None 
@@ -34,10 +36,11 @@ class Commands:
     ui = None
     message_time = 0
 
-    def __init__(self, config, player, cmdrecorder):
+    def __init__(self, config, player, cmdrecorder, background):
         self.config = config
         self.player = player
         self.cmdrecorder = cmdrecorder
+        self.background = background
 
     def execute(self, cmd, ui=None):
         global action_mapping
@@ -148,6 +151,29 @@ class Commands:
         self.pad_chords = parse_chords(self.config[what].get("pad_chords", "1"), self.scale, self.key_note)
         self.pad_chord_seq = parse_sequence(self.config[what].get("pad_sequence", "I"), self.pad_chords)
         self.active_preset=what
+        bpm = 120
+        if "bpm" in self.config[what]:
+            bpm = config[what].getint("bpm")
+        timing = "common"
+        if "timing" in self.config[what]:
+            timing = config[what]["timing"]
+        if timing == "common":
+            timing = "4/4"
+        elif timing == "waltz":
+            timing = "3/4"
+        elif timing == "ballad":
+            timing = "2/4"
+        elif timing == "cut":
+            timing = "2/2"
+        elif timing == "uncommon":
+            timing = None
+        elif "/" not in timing:
+            raise ConfigError("Unknown timing: " + timing)
+        if timing is None:
+            self.background.set_tempo(None, None, bpm2tempo(bpm))
+        else:
+            nude = timing.partition("/")
+            self.background.set_tempo(int(nude[0]), int(nude[-1]), bpm2tempo(bpm)) 
 
     def set_lead_note(self, note = None): 
         if self.lead_note is not None:
@@ -165,7 +191,8 @@ class Commands:
                 self.ui.puts("{}".format(getLyForMidiNote(note)))
 
     def do_panic(self):
-        self.ui.puts("\nPANIC ")
+        if self.ui is not None:
+            self.ui.puts("\nPANIC ")
         note_set = []
         for channel in range(0,16):
             for note in range(0,128):
@@ -174,6 +201,7 @@ class Commands:
         self.message_time = 0
 
     def set_pad_note(self, note = None): 
+        global PAD_VELOCITY
         if isinstance(self.pad_note, int):
             self.player.feed_midi(Message('note_off', note=self.pad_note, channel=PAD_CHANNEL, time=self.message_time))
             self.message_time = 0
@@ -185,11 +213,11 @@ class Commands:
             self.message_time = 0
 
         if isinstance(note, int):
-            self.player.feed_midi(Message('note_on', note=note, channel=PAD_CHANNEL, time=self.message_time))
+            self.player.feed_midi(Message('note_on', note=note, channel=PAD_CHANNEL, time=self.message_time, velocity=PAD_VELOCITY))
         elif hasattr(note,"__iter__"):
             note_set = []
             for pn in note:
-                note_set.append(Message('note_on', note=pn, channel=PAD_CHANNEL))
+                note_set.append(Message('note_on', note=pn, channel=PAD_CHANNEL, velocity=PAD_VELOCITY))
             self.player.feed_midi(*note_set, time=self.message_time, abbr="chord_on")
             self.message_time = 0
         elif note is None:
@@ -235,6 +263,25 @@ class Commands:
     def do_next(self, what):
         self.do_mark_good(what)
         self.do_chord_next(what)
+
+    def do_octave(self, name):
+        global OCTAVE_STEPS
+        if name == "octave_up":
+            self.key_note += OCTAVE_STEPS
+        elif name == "octave_down":
+            self.key_note -= OCTAVE_STEPS
+    def do_play_pause(self, name):
+        if not self.background.is_stopped():
+            self.lead_note()
+            self.pad_note()
+        self.background.play_pause()
+    def do_rewind(self, name):
+        self.background.rewind()
+        self.lead_note()
+        self.pad_note()
+        self.pad_chord_idx = -1
+    def do_menu(self, name):
+        pass
 
 action_mapping = {
 "quit": Commands.do_nothing, # handled in the loop
@@ -283,24 +330,19 @@ action_mapping = {
 "note_steps+10": Commands.do_note,
 "note_steps+11": Commands.do_note,
 "note_steps+12": Commands.do_note,
-# "chord_3": Commands.do_chord_3,
-# "chord_2": Commands.do_chord_2,
-# "chord_1": Commands.do_chord_1,
-# "chord_0": Commands.do_chord_0, 
 "rest": Commands.do_rest,
 "silence": Commands.do_silence,
+
+"octave_up": Commands.do_octave,
+"octave_down": Commands.do_octave,
+"play_pause": Commands.do_play_pause,
+"rewind": Commands.do_rewind,
+"menu": Commands.do_menu,
 }
 
 
 
 
-
-
-#def find_chord(offset, t = ""):
-#    ret = []
-#    for step in chordSteps[t]:
-#        ret.append(KEY_STEPS[(offset + step) % OCTAVE_STEPS])
-#    return ret
 
 _interval_conversion = {
     "b1": -1,

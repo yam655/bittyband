@@ -10,8 +10,8 @@ import os.path
 from datetime import datetime, timedelta 
 from mido import Message, MidiFile, MidiTrack
 
-from .midinames import getLyForMidiNote
-from .commands import LEAD_CHANNEL, PAD_CHANNEL
+from .midinames import getLyForMidiNote, getLyForMidiDrum
+from .commands import LEAD_CHANNEL, PAD_CHANNEL, DRUM_CHANNEL
 
 _template_p1 = r'''
 \version "2.18.2"
@@ -166,9 +166,15 @@ class ExportLy:
         chunk = [] 
         if what_type == "note_on": 
             if len(what) > 1:
-                chunk.append(" < ")
-            for w in what:
-                chunk.append(getLyForMidiNote(w.note))
+                chunk.append(" <")
+            if channel == DRUM_CHANNEL:
+                for w in what:
+                    chunk.append(" ")
+                    chunk.append(getLyForMidiDrum(w.note))
+            else:
+                for w in what:
+                    chunk.append(" ")
+                    chunk.append(getLyForMidiNote(w.note))
             if len(what) > 1:
                 chunk.append(" > ")
         elif what_type == "note_off": 
