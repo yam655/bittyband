@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__all__ = ["BackgroundDrums"]
+__all__ = ["BackgroundDrums", "BackgroundNull"]
 
 import sys
 import mido
@@ -141,4 +141,37 @@ class BackgroundDrums:
 
     def rewind(self):
         self.queue.put("restart")
+
+class BackgroundNull:
+
+    def __init__(self, config = None, player = None):
+        self.paused = True
+
+    def start(self):
+        pass
+
+    def end(self):
+        pass
+
+    def runner(self):
+        pass
+
+    def set_tempo(self, num, dem, tempo):
+        pass
+
+    def set_pattern(self, num, dem, tempo, *seq):
+        pass
+
+    def play_pause(self):
+        if self.paused:
+            self.paused = False
+        else:
+            self.paused = True
+        return self.paused
+
+    def is_stopped(self):
+        return self.paused
+
+    def rewind(self):
+        pass
 

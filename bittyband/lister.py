@@ -5,6 +5,7 @@ __all__ = ["Lister"]
 from pathlib import Path
 import sys
 import time
+from .bgplayer import BackgroundNull
 from configparser import ConfigParser
 from .exportly import ExportLy
 from .exportmidi import ExportMidi
@@ -52,20 +53,20 @@ class Lister:
 
     def export_midi(self, what, output):
         exporter = ExportMidi(self.config, output)
-        cmds = Commands(self.config, exporter, None)
+        cmds = Commands(self.config, exporter, None, BackgroundNull())
         exporter.start()
         cmds.play(self.get(what), realtime=False)
         exporter.end()
 
     def export_ly(self, what, output, title=""):
         exporter = ExportLy(self.config, output, title=title)
-        cmds = Commands(self.config, exporter, None)
+        cmds = Commands(self.config, exporter, None, BackgroundNull())
         exporter.start()
         cmds.play(self.get(what), realtime=False)
         exporter.end()
 
-    def save(self): 
-        with open(str(self.proj_lists), 'w') as projfile: 
+    def save(self):
+        with open(str(self.proj_lists), 'w') as projfile:
             self.marks.write(projfile)
 
     def get_title(self, what, width=None):
