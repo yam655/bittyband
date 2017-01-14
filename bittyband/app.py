@@ -9,6 +9,7 @@ from .ui import get_ui
 from .cmdrecorder import CommandRecorder
 from .lister import Lister
 from .bgplayer import BackgroundDrums
+from .importer import ImporterBackend
 
 def app(config):
     keymaps = KeyMaps(config)
@@ -19,7 +20,7 @@ def app(config):
     if config["instance"]["mode"] == "gui":
         recorder = CommandRecorder(config)
         cmds = Commands(config, pbplayer, recorder, background)
-        ui = ui_maker(config, keymaps, cmds, recorder)
+        ui = ui_maker(config=config, keymaps=keymaps, commands=cmds, cmdrecorder=recorder)
         pbplayer.start()
         recorder.start()
         background.start()
@@ -31,17 +32,25 @@ def app(config):
             recorder.end()
 
     elif config["instance"]["mode"] == "list":
-        lister = Lister(config)
         cmds = Commands(config, pbplayer, None, background)
-        ui = ui_maker(config, None, cmds, None, lister=lister)
+        lister = Lister(config, cmds)
+        ui = ui_maker(config=config, commands=cmds, lister=lister)
         pbplayer.start()
-        background.end()
+        background.start()
         try:
             ui.list_it()
         finally:
             background.end()
             pbplayer.end()
 
+    # elif config["instance"]["mode"] == "import":
+    #     importer = ImporterBackend(config)
+    #     ui = ui_maker(config=config, importer=importer, player=pbplayer)
+    #     pbplayer.start()
+    #     try:
+    #         ui.import_it()
+    #     finally:
+    #         pbplayer.end()
+
     elif config["instance"]["mode"] == "test":
         keymaps.test()
-

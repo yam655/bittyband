@@ -1,40 +1,39 @@
 #!/bin/env python3
 
-__all__ = ["parse", "get_config", "get_project_dir"]
+"""Handle arguments and configuration files."""
 
-from configparser import ConfigParser
+__all__ = ["parse", "get_config"]
+
 import argparse
-from pathlib import Path
 import sys
-from .errors import ConfigError
+from configparser import ConfigParser
+from pathlib import Path
 
 from .player import PushButtonPlayer
 from .commands import Commands
+from .errors import ConfigError
+
 
 """ The sum total of the built-in, user and project configuration """
 config = ConfigParser(inline_comment_prefixes=None)
-""" The active project's base directory """
-project_dir = None
 
-def get_project_dir():
-    global project_dir
-    return project_dir
 
-def parse(argv): 
+def parse(argv):
     global config
     global parser
     if len(argv) == 0:
         argv = ["gui"]
     args = parser.parse_args(argv)
-    if hasattr(args,"func"):
+    if hasattr(args, "func"):
         if args.func(args):
             sys.exit(0)
     config = load_project_config(args)
-    if hasattr(args,"mode"):
+    if hasattr(args, "mode"):
         config["instance"]["mode"] = args.mode
     else:
         config["instance"]["mode"] = "gui"
     return config
+
 
 default_config = r"""
 [DEFAULT]
@@ -167,12 +166,14 @@ menu = "/"
 
 """
 
-config.read_string(default_config,"<default configuration>") 
+config.read_string(default_config, "<default configuration>")
 home_dir = None
 
 parser = argparse.ArgumentParser(
-                    description="A stupidly simple music composition aid.")
-def load_home_config(args = None):
+    description="A stupidly simple music composition aid.")
+
+
+def load_home_config(args=None):
     """ Load the user-specific configuration.
 
         It can not contain the `project` section. It is based upon the
@@ -186,7 +187,7 @@ def load_home_config(args = None):
             home_dir = Path(args.user_config)
         else:
             home_dir = Path("~/.bittyband").expanduser()
-        home_dir.mkdir(parents=True,exist_ok=True)
+        home_dir.mkdir(parents=True, exist_ok=True)
         home_config = home_dir / "settings.conf"
         if home_config.exists():
             config.read(home_config)
@@ -195,6 +196,7 @@ def load_home_config(args = None):
             if "instance" in config:
                 config["instance"].clear()
     return config
+
 
 def get_project_root():
     """ Return the common base-directory for projects.
@@ -219,36 +221,31 @@ def get_project_root():
         return root.resolve()
     return None
 
-def find_project_dir(project): 
-    global project_dir
-    if project_dir is None:
-        if project is None:
-            project = "."
-        root = get_project_root()
-        if "." == project:
-            project_dir = Path(".")
-        elif "/" not in project and "\\" not in project:
-            if "projects" in config:
-                project_dir = config["projects"].get(project)
-                if project_dir is not None:
-                    project_dir = Path(project_dir)
-                else:
-                    project_dir = Path(project)
-        else:
-            project_dir = Path(project)
 
-        if project_dir is None:
-            project_dir = Path(".", project)
-        if root is None:
-            project_dir = project_dir.expanduser()
-        else:
-            project_dir = root.joinpath(project_dir).expanduser()
-        if project_dir.is_dir():
-            project_dir = project_dir.resolve()
+def find_project_dir(project):
+    if project is None:
+        project = "."
+    root = get_project_root()
+    project_dir = Path(project)
+    if "." == project:
+        project_dir = Path(".")
+    elif "/" not in project and "\\" not in project:
+        if "projects" in config:
+            if project in config["projects"]:
+                project_dir = Path(config["projects"].get(project))
+
+    if project_dir is None:
+        project_dir = Path(".", project)
+    if root is None:
+        project_dir = project_dir.expanduser()
+    else:
+        project_dir = root.joinpath(project_dir).expanduser()
+    if project_dir.is_dir():
+        project_dir = project_dir.resolve()
     return project_dir
 
-def load_project_config(args = None):
-    global project_dir
+
+def load_project_config(args=None):
     global config
 
     load_home_config(args)
@@ -266,19 +263,21 @@ def load_project_config(args = None):
     config["instance"]["project_dir"] = str(project_dir)
     return config
 
+
 project_stub = """
 [project]
 version = 1
 """
 
+
 def create(args):
-    global project_dir
     load_home_config(args)
     project_dir = find_project_dir(args.project)
-    project_dir.mkdir(parents=True,exist_ok=True)
+    project_dir.mkdir(parents=True, exist_ok=True)
     conf_path = project_dir / "bittyband.conf"
     conf_path.write_text(project_stub)
     return True
+
 
 def panic(args):
     pbplayer = PushButtonPlayer(config)
@@ -290,12 +289,13 @@ def panic(args):
         pbplayer.end()
     return True
 
+
 parser.add_argument("--user-config", metavar="DIR", dest="user_config",
-        help="Specify an alternate user configuration directory")
+                    help="Specify an alternate user configuration directory")
 parser.add_argument("-p", "--project", metavar="PROJ",
-        help="Specify a project or project location other than the current directory.")
+                    help="Specify a project or project location other than the current directory.")
 parser.add_argument("--midiport", metavar="PORT",
-        help="Specify an explicit MIDI port to use. (Default: first available.)")
+                    help="Specify an explicit MIDI port to use. (Default: first available.)")
 # parser.add_argument("-u", "--user", help="ignore project-specific config file")
 subparsers = parser.add_subparsers(title="Actions", help="Action to take")
 parser_create = subparsers.add_parser("create", description="Create a new project")
@@ -309,4 +309,6 @@ parser_test = subparsers.add_parser("test", description="Perform some internal t
 parser_test.set_defaults(mode="test")
 parser_test = subparsers.add_parser("panic", description="Perform a MIDI Panic and clear all notes.")
 parser_test.set_defaults(func=panic, mode="panic")
-
+parser_importer = subparsers.add_parser("import", description="Grand import mode")
+parser_importer.add_argument("-i", "--import", metavar="FILE", dest="import_file")
+parser_importer.set_defaults(mode="import")

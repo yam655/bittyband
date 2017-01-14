@@ -1,30 +1,89 @@
 #!/usr/bin/env python3
 
-__all__ = ["Lister"]
-
 from pathlib import Path
-import sys
 import time
-from .bgplayer import BackgroundNull
 from configparser import ConfigParser
+
+from .bgplayer import BackgroundNull
 from .exportly import ExportLy
 from .exportmidi import ExportMidi
 from .commands import Commands
+from .errors import ConfigError
+
 
 class Lister:
-    def __init__(self, config):
+
+    def __init__(self, config, commands):
+        self.config = config
+        self.commands = commands
         self.project_dir = Path(config["instance"]["project_dir"])
-        self.proj_lists = self.project_dir / "cmd-streams.index"
+        self.streams_index = self.project_dir / "cmd-streams.index"
         self.marks = ConfigParser()
         self.order = []
-        self.config = config
-        if self.proj_lists.exists():
-            self.marks.read(str(self.proj_lists))
+        if self.streams_index.exists():
+            self.marks.read(str(self.streams_index))
         else:
             self.scan()
 
+    def _do_rename(self, title, line):
+        if title == "" or title is None:
+            self.rename(self.get_order()[line], "")
+        else:
+            self.rename(self.get_order()[line], title)
+        return True
+
+    def _do_play(self, line):
+        material = self.get(self.get_order()[line])
+        self.commands.play(material)
+        self.commands.background.pause()
+        return False
+
+    def _do_delete(self, line):
+        self.delete(self.get_order()[line])
+        return True
+
+    def _do_export_midi(self, filename, line):
+        mark = self.get_mark(self.get_order()[line])
+        if filename is None or len(filename.strip()) == 0:
+            self.export_midi(self.get_order()[line],
+                             self.project_dir / "{}.midi".format(mark.get("title", "export")))
+        else:
+            self.export_midi(self.get_order()[line], self.project_dir / filename)
+        return False
+
+    def _do_export_lily(self, filename, line):
+        mark = self.get_mark(self.get_order()[line])
+        title = mark.get("title", "Untitled")
+        if filename is None or len(filename.strip()) == 0:
+            self.export_ly(self.get_order()[line],
+                           self.project_dir / "{}.ly".format(mark.get("title", "export")),
+                           title=title)
+        else:
+            self.export_ly(self.get_order()[line], self.project_dir / filename, title=title)
+        return False
+
+    def prepare_keys(self, lister):
+        lister.register_key(self._do_rename, "R", "r", arg="?str",
+                            prompt="New title?",
+                            description="Rename the current marked segment")
+        lister.register_key(self._do_play, "P", "p", arg="...slow",
+                            prompt="Playing...",
+                            description="Play the current marked segment")
+        lister.register_key(self._do_delete, "D", "d", arg="?yN",
+                            prompt="Really delete? (y/N)",
+                            description="Delete the current marked segment")
+        lister.register_key(self._do_export_midi, "M", "m", arg="?str",
+                            prompt="Export to MIDI (^G to cancel; ENTER to name based on segment.]",
+                            description="Export to MIDI")
+        lister.register_key(self._do_export_lily, "L", "l", arg="?str",
+                            prompt="Export to Lilypond (^G to cancel; ENTER to name based on segment.]",
+                            description="Export to Lilypond file")
+
     def get_order(self):
         return self.order
+
+    def get_line(self, bit, max_len):
+        return self.get_title(bit, max_len)
 
     def get_mark(self, what):
         return self.marks[what]
@@ -66,7 +125,7 @@ class Lister:
         exporter.end()
 
     def save(self):
-        with open(str(self.proj_lists), 'w') as projfile:
+        with open(str(self.streams_index), 'w') as projfile:
             self.marks.write(projfile)
 
     def get_title(self, what, width=None):
@@ -88,7 +147,7 @@ class Lister:
             line_start = None
             start_secs = 0.0
             while line < len(txt):
-                j = txt[line].split(",",1)
+                j = txt[line].split(",", 1)
                 cmd = j[-1]
                 if cmd == "mark_bad":
                     line_start = line + 1
@@ -132,8 +191,7 @@ def human_duration(seconds):
         n //= 60
     if n > 0:
         h = "{:02d}:".format(n % 24)
-        n //=24
+        n //= 24
     if n > 0:
         d = "{}:".format(n)
     return "".join([d, h, m, s])
-
