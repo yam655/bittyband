@@ -43,14 +43,14 @@ def app(config):
             background.end()
             pbplayer.end()
 
-    # elif config["instance"]["mode"] == "import":
-    #     importer = ImporterBackend(config)
-    #     ui = ui_maker(config=config, importer=importer, player=pbplayer)
-    #     pbplayer.start()
-    #     try:
-    #         ui.import_it()
-    #     finally:
-    #         pbplayer.end()
+    elif config["instance"]["mode"] == "import":
+        importer = ImporterBackend(config)
+        ui = ui_maker(config=config, importer=importer, player=pbplayer)
+        pbplayer.start()
+        try:
+            ui.import_it()
+        finally:
+            pbplayer.end()
 
     elif config["instance"]["mode"] == "test":
         keymaps.test()

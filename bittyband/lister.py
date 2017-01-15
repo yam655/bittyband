@@ -8,7 +8,7 @@ from .bgplayer import BackgroundNull
 from .exportly import ExportLy
 from .exportmidi import ExportMidi
 from .commands import Commands
-from .errors import ConfigError
+from .utils.time import human_duration
 
 
 class Lister:
@@ -173,25 +173,3 @@ class Lister:
                 f.unlink()
         self.save()
 
-
-def human_duration(seconds):
-    if seconds is None:
-        return "?"
-    if isinstance(seconds, str):
-        seconds = float(seconds)
-
-    tiny = "{:>.3f}".format(seconds % 1.0)[1:]
-    s = "{:02d}{}".format(int(seconds) % 60, tiny)
-    m = "00:"
-    h = ""
-    d = ""
-    n = seconds // 60
-    if n > 0:
-        m = "{:02d}:".format(n % 60)
-        n //= 60
-    if n > 0:
-        h = "{:02d}:".format(n % 24)
-        n //= 24
-    if n > 0:
-        d = "{}:".format(n)
-    return "".join([d, h, m, s])

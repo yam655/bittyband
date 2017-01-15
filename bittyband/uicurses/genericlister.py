@@ -33,7 +33,9 @@ class GenericLister:
         max_y, max_x = self.stdscr.getmaxyx()
         self.stdscr.hline(max_y - 2, 0, "=", max_x)
         if len(self.logic.get_order()) == 0:
-            self.stdscr.addstr(0, _INDICATOR_OFFSET, "<no data>")
+            self.stdscr.addstr(0, 0, ">  ", curses.A_REVERSE)
+            self.stdscr.chgat(0, 0, curses.A_REVERSE)
+            self.stdscr.addstr(0, _INDICATOR_OFFSET, "<no data>", curses.A_REVERSE)
             return
         max_y, max_x = self.stdscr.getmaxyx()
         max_y -= 2
@@ -168,7 +170,9 @@ class GenericLister:
             else:
                 raise ConfigError(repr(ch))
 
-            if old_active != self.active:
+            if old_active == -1:
+                self.active = old_active
+            elif old_active != self.active:
                 max_y = self.stdscr.getmaxyx()[0] - 2
                 self.stdscr.addstr(old_active - self.top, 0, " ")
                 if self.active < 0:

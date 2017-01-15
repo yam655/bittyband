@@ -40,7 +40,7 @@ class UiCurses:
         generic_lister(self.lister)
 
     def import_it(self):
-        curses.wrapper(self._import)
+        generic_lister(self.importer)
 
     def read_string(self, prompt=""):
         global code
@@ -60,11 +60,6 @@ class UiCurses:
         stdscr.scrollok(True)
         self.stdscr = stdscr
         self._pick_import_file()
-
-    def _pick_import_file(self):
-        if "import-file" in self.config["instance"]:
-            return self.config["instance"]["import_file"]
-        self.importer.scan()
 
     def _jam(self, stdscr):
         stdscr.keypad(True)
