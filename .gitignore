@@ -1,8 +1,10 @@
+# test project directory
+test-project/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
-test-project/
 
 # C extensions
 *.so
@@ -88,3 +90,6 @@ ENV/
 
 # Rope project settings
 .ropeproject
+
+# Other IDEs
+.idea

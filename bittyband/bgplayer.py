@@ -17,20 +17,23 @@ DRUM_CHANNEL=9
 
 class BackgroundDrums:
 
-    def __init__(self, config, player):
+    def __init__(self, config):
         self.queue = queue.Queue() 
         self.thread = None
         self.active = {}
-        self.player = player
         self.ui = None
         self.paused = True
+        self.midifile = None
+
+    def wire(self, *, push_player, **kwargs):
+        self.player = push_player
 
     def __del__(self):
         self.end()
 
     def start(self):
         if self.thread is None:
-            self.thread = threading.Thread(target=self.runner)
+            self.thread = threading.Thread(target=self.runner, daemon=True)
             self.thread.start()
 
     def end(self):
@@ -50,8 +53,12 @@ class BackgroundDrums:
                     self.player.feed_midi(midi)
                     if not self.queue.empty():
                         terminate, br = self._process_queue()
-                        if br:
-                            break 
+                        while self.paused:
+                            terminate, br = self._process_queue()
+                            if terminate or br:
+                                break
+                        if terminate or br:
+                            break
         self.thread = None
         self.queue = None
 
@@ -70,11 +77,8 @@ class BackgroundDrums:
                     return (False, False)
                 term = br = True
                 self.paused = True
-                while self.paused:
-                    term, br = self._process_queue()
-                    if term or br:
-                        break
-                return (term, br)
+            elif message == "pause":
+                self.paused = True
             elif message == "resume":
                 self.paused = False
         return (False, False)
@@ -136,6 +140,9 @@ class BackgroundDrums:
     def play_pause(self):
         self.queue.put("play-pause")
 
+    def pause(self):
+        self.queue.put("pause")
+
     def is_stopped(self):
         return self.paused
 
@@ -168,6 +175,9 @@ class BackgroundNull:
         else:
             self.paused = True
         return self.paused
+
+    def pause(self):
+        self.paused = True
 
     def is_stopped(self):
         return self.paused

@@ -7,9 +7,9 @@ import sys
 import unicodedata
 
 class KeyMaps:
-    keymap = None
+    jam_map = None
     def __init__(self, config):
-        self.keymap = self.map_keys(config)
+        self.jam_map = self.map_keys(config)
 
     def test(self):
         pass

@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-__all__ = ["ExportLy"]
-
 import sys
 import mido
 import queue
@@ -14,6 +12,9 @@ from .midinames import getLyForMidiNote, getLyForMidiDrum
 from .commands import LEAD_CHANNEL, PAD_CHANNEL, DRUM_CHANNEL
 
 LILYPOND_VERSION = "2.18.2"
+
+_numbers_names = {"0": "Zero", "1":"One", "2":"Two", "3":"Three", "4":"Four",
+"5":"Five", "6":"Six", "7":"Seven", "8":"Eight", "9":"Nine"}
 
 
 class LilypondFile:
@@ -62,7 +63,7 @@ class LilypondFile:
             else:
                 self.chords[-1].append(chunk)
         else:
-            cmt = "%({}) {}".format(channel, cmt)
+            cmt = "%({}) {}".format(channel, chunk)
             self.file_comments.append(cmt)
 
     def __format__(self, fmt):
@@ -143,8 +144,8 @@ class LilypondFile:
         result.append("")
 
         for idx in range(len(self.lyrics)):
-            sufx = number_suffix(idx + 1)
-            result.append("".join("words",sufx," = {"))
+            sufx = number_suffix(idx + 1, len(self.lyrics))
+            result.append("".join(["words", sufx, " = {"]))
             result.append('    \\set stanza = #"{}. "'.format(idx+1))
             for lne in self.lyrics[idx]:
                 result.append('    {}'.format(lne))
@@ -163,8 +164,8 @@ class LilypondFile:
         result.append("        } \\melody")
 
         for idx in range(len(self.lyrics)):
-            sufx = number_suffix(idx + 1)
-            result.append("".join("        \\addlyrics { \\words", sufx," }"))
+            sufx = number_suffix(idx + 1, len(self.lyrics))
+            result.append("".join(["        \\addlyrics { \\words", sufx," }"]))
         result.append("    >>")
         if self.make_pdf:
             result.append("    \\layout { }")
@@ -178,6 +179,8 @@ class LilypondFile:
 
 class ExportLy:
     filenm = None
+    nu = None
+    de = None
 
     def __init__(self, config, filenm, title=None):
         self.filenm = filenm
@@ -341,16 +344,15 @@ def lengthen_notes(note, r = 0.25, nu = 4, de = 4):
             ch.append(" ~ {}16".format(note))
     return ch
 
-numbers_names = {"0": "Zero", "1":"One", "2":"Two", "3":"Three", "4":"Four",
-"5":"Five", "6":"Six", "7":"Seven", "8":"Eight", "9":"Nine"}
+
 def number_suffix(idx, totl):
-    global number_names
+    global _numbers_names
     if totl < 26:
         return chr(ord('A') + idx)
     ret = []
     for c in str(totl):
-        if c in numbers_names:
-            ret.append(numbers_names[c])
+        if c in _numbers_names:
+            ret.append(_numbers_names[c])
         else:
             ret.append(c)
     return "".join(ret)

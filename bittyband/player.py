@@ -16,16 +16,15 @@ class PushButtonPlayer:
         self.queue = queue.Queue() 
         self.thread = None
         self.active = {}
-        self.reconfigure(config)
-        self.ui = None
+        self.midiport = None
+        if "project" in config:
+            self.midiport = config["instance"].get("midiport")
 
     def __del__(self):
         self.end()
 
-    def reconfigure(self, config):
-        self.midiport = None
-        if "project" in config:
-            self.midiport = config["instance"].get("midiport")
+    def wire(self, **kwargs):
+        pass
 
     def start(self):
         if self.thread is None:

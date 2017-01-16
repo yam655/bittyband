@@ -19,6 +19,9 @@ class CommandRecorder:
         self.queue = queue.Queue() 
         self.thread = None
 
+    def wire(self, **kwargs):
+        pass
+
     def start(self):
         self.thread = threading.Thread(target=self.writer)
         self.thread.start()
