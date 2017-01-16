@@ -5,16 +5,19 @@ __all__ = ["human_duration", "reasonable_time"]
 import time
 
 
-def human_duration(seconds):
-    if seconds is None:
+def human_duration(seconds, floor=False):
+    if seconds is None or seconds == "":
         return "??:??"
     if isinstance(seconds, str):
+        if seconds.strip() == "":
+            return "??:??"
         seconds = float(seconds)
 
     tiny = ""
-    tiny_bit = seconds % 1.0
-    if tiny_bit > 0:
-        tiny = "{:.3f}".format(tiny_bit)[1:]
+    if not floor:
+        tiny_bit = seconds % 1.0
+        if tiny_bit > 0:
+            tiny = "{:.3f}".format(tiny_bit)[1:]
     out = "{:02d}{}".format(int(seconds) % 60, tiny)
     n = seconds // 60
     if n > 0:
@@ -30,5 +33,11 @@ def human_duration(seconds):
     return out
 
 
-def reasonable_time(seconds):
-    return time.strftime("(%a) %Y-%m-%d %H:%M", time.localtime(seconds))
+def reasonable_time(seconds, local=True):
+    if isinstance(seconds, str):
+        seconds = float(seconds)
+    if local:
+        t = time.localtime(seconds)
+    else:
+        t = time.gmtime(seconds)
+    return time.strftime("(%a) %Y-%m-%d %H:%M", t)

@@ -8,33 +8,69 @@ from configparser import ConfigParser
 import taglib
 import pyglet
 import time
-import sys
 
 from .utils.time import human_duration, reasonable_time
-from .errors import ConfigError
 
 class ImporterBackend:
     order = []
     data = {}
+    ui = None
+    player = None
+    last_player_time = None
+    play_length = None
 
     def __init__(self, config):
         self.project_dir = Path(config["instance"]["project_dir"])
+
+    def wire(self, *, ui, **kwargs):
+        self.ui = ui
+
+    def _play_status(self):
+        if not self.player:
+            return None
+        t = self.player.time
+        if t >= self.play_length:
+            return None
+        self.last_player_time = t
+        return human_duration(t, floor=True)
+
+    def _play_live_seek(self, seconds):
+        if seconds < 0 and self.player.time + seconds >= 0:
+            self.player.seek(self.player.time + seconds)
+            self.player.play()
+            return
+
+        if self.play_length is None:
+            return
+
+        offset = seconds + self.player.time
+        while offset < 0:
+            offset += self.play_length
+        while offset > self.play_length:
+            offset -= self.play_length
+        self.player.seek(offset)
+        self.player.play()
 
     def _do_play(self, line):
         datum = self.data[self.order[line]]
         media = self.project_dir / "import" / datum["media"]
         media = media.resolve()
+        self.play_length = datum["length_secs"]
         sound = pyglet.media.load(str(media))
-        snd = sound.play()
-        while snd.playing:
-            sys.stderr.write("{}\r".format(human_duration(snd.time)))
-            time.sleep(0.001)
+        group = pyglet.media.SourceGroup(sound.audio_format, sound.video_format)
+        group.queue(sound)
+        self.player = pyglet.media.Player()
+        self.player.queue(group)
+        self.player.play()
+        time.sleep(0.1)
+        self.ui.play_ui(self._play_status, seek=self._play_live_seek)
+        self.player.pause()
 
     def prepare_keys(self, lister):
         # lister.register_key(self._do_rename, "R", "r", arg="?str",
         #                     prompt="New title?",
         #                     description="Rename the current marked segment")
-        lister.register_key(self._do_play, "P", "p", arg="...slow", prompt="Playing",
+        lister.register_key(self._do_play, "P", "p", arg="...slow", prompt="Playing...",
                             description="Play this file.")
 
     def get_order(self):
@@ -113,7 +149,8 @@ class ImporterBackend:
                     meta.write(out)
 
             title = meta["audio"]["title"]
-            total_length = human_duration(float(meta["audio"]["length"]))
+            length_secs = float(meta["audio"]["length"])
+            total_length = human_duration(length_secs)
             timestamp =  reasonable_time(float(meta["audio"]["created"]))
             tracks = int(meta["audio"]["tracks"])
             unprocessed_length = None
@@ -125,6 +162,7 @@ class ImporterBackend:
                 "media": str(media_file),
                 "title": title,
                 "total_length": total_length,
+                "length_secs": length_secs,
                 "timestamp": timestamp,
                 "tracks": tracks,
                 "unprocessed_length": unprocessed_length,

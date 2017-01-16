@@ -11,21 +11,21 @@ _code = locale.getpreferredencoding()
 _INDICATOR_OFFSET = 2
 
 
-def generic_lister(logic):
-    lister = GenericLister(logic)
-    curses.wrapper(lister)
-
-
 class GenericLister:
-    def __init__(self, logic):
+    def __init__(self, config):
         self.stdscr = None
         self.active = 0
         self.top = 0
-        self.logic = logic
         self.keymap = {}
         self.running = False
-        self.logic.prepare_keys(self)
+        self.ui = None
+
+    def wire(self, *, logic, ui, **kwargs):
+        self.ui = ui
+        self.keymap.clear()
         self._register_builtins()
+        self.logic = kwargs[logic]
+        self.logic.prepare_keys(self)
 
     def refresh(self):
         global _INDICATOR_OFFSET
@@ -42,14 +42,12 @@ class GenericLister:
         for y in range(0, max_y):
             if y + self.top >= len(self.logic.get_order()):
                 break
-            try:
-                bit = self.logic.get_order()[y+self.top]
-            except IndexError:
-                raise IndexError("{} vs {}".format(y + self.top, len(self.logic.get_order())))
+            bit = self.logic.get_order()[y+self.top]
             title = self.logic.get_line(bit, max_x - _INDICATOR_OFFSET * 2)
             if y + self.top == self.active:
                 self.stdscr.addstr(self.active - self.top, 0, ">  ", curses.A_REVERSE)
                 self.stdscr.addstr(y, _INDICATOR_OFFSET, title, curses.A_REVERSE)
+                self.stdscr.chgat(y, 0, curses.A_REVERSE)
             else:
                 self.stdscr.addstr(y, _INDICATOR_OFFSET, title)
         self.stdscr.refresh()
@@ -126,7 +124,7 @@ class GenericLister:
         self.running = True
 
         while self.running:
-            ch = stdscr.getkey()
+            ch = self.ui.get_key()
             old_active = self.active
             if ch == "^]":
                 ch = "ESC"
@@ -168,7 +166,7 @@ class GenericLister:
 
                 self.stdscr.refresh()
             else:
-                raise ConfigError(repr(ch))
+                self.show_status("Unknown key: {}".format(ch))
 
             if old_active == -1:
                 self.active = old_active

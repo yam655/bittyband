@@ -17,21 +17,23 @@ DRUM_CHANNEL=9
 
 class BackgroundDrums:
 
-    def __init__(self, config, player):
+    def __init__(self, config):
         self.queue = queue.Queue() 
         self.thread = None
         self.active = {}
-        self.player = player
         self.ui = None
         self.paused = True
         self.midifile = None
+
+    def wire(self, *, push_player, **kwargs):
+        self.player = push_player
 
     def __del__(self):
         self.end()
 
     def start(self):
         if self.thread is None:
-            self.thread = threading.Thread(target=self.runner)
+            self.thread = threading.Thread(target=self.runner, daemon=True)
             self.thread.start()
 
     def end(self):

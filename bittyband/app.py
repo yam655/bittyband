@@ -3,54 +3,46 @@
 import sys
 
 from .commands import Commands
-from .keymaps import KeyMaps
 from .player import PushButtonPlayer
 from .ui import get_ui
 from .cmdrecorder import CommandRecorder
-from .lister import Lister
+from .jamlister import JamLister
 from .bgplayer import BackgroundDrums
 from .importer import ImporterBackend
 
 def app(config):
-    keymaps = KeyMaps(config)
-    pbplayer = PushButtonPlayer(config)
     ui_maker = get_ui()
-    background = BackgroundDrums(config, pbplayer)
+    wiring = {}
+    wiring["ui"] = ui = ui_maker(config)
+    wiring["push_player"] = PushButtonPlayer(config)
+    wiring["metronome"] = BackgroundDrums(config)
+    wiring["push_commands"] = Commands(config)
 
-    if config["instance"]["mode"] == "gui":
-        recorder = CommandRecorder(config)
-        cmds = Commands(config, pbplayer, recorder, background)
-        ui = ui_maker(config=config, keymaps=keymaps, commands=cmds, cmdrecorder=recorder)
-        pbplayer.start()
-        recorder.start()
-        background.start()
-        try:
-            ui.jam()
-        finally:
-            background.end()
-            pbplayer.end()
-            recorder.end()
+    need_for_mode = []
+    mode = lambda: True
+    if config["instance"]["mode"] == "gui" or config["instance"]["mode"] == "jam":
+        wiring["push_recorder"] = CommandRecorder(config)
+        need_for_mode = ["push_player", "push_recorder", "metronome"]
+        mode = ui.start_jam
 
     elif config["instance"]["mode"] == "list":
-        cmds = Commands(config, pbplayer, None, background)
-        lister = Lister(config, cmds)
-        ui = ui_maker(config=config, commands=cmds, lister=lister)
-        pbplayer.start()
-        background.start()
-        try:
-            ui.list_it()
-        finally:
-            background.end()
-            pbplayer.end()
+        wiring["jam_lister"] = JamLister(config)
+        need_for_mode = ["push_player", "metronome"]
+        mode = ui.start_list
 
     elif config["instance"]["mode"] == "import":
-        importer = ImporterBackend(config)
-        ui = ui_maker(config=config, importer=importer, player=pbplayer)
-        pbplayer.start()
-        try:
-            ui.import_it()
-        finally:
-            pbplayer.end()
+        wiring["import_lister"] = ImporterBackend(config)
+        mode = ui.start_import
 
     elif config["instance"]["mode"] == "test":
-        keymaps.test()
+        pass
+
+    for v in wiring.values():
+        v.wire(**wiring)
+    for thing in need_for_mode:
+        wiring[thing].start()
+    try:
+        mode()
+    finally:
+        for thing in need_for_mode:
+            wiring[thing].end()

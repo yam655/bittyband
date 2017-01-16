@@ -5,42 +5,131 @@ try:
 except ImportError:
     curses = None
 
-from curses import ascii
+try:
+    from _thread import interrupt_main
+except ImportError:
+    interrupt_main = None
+
 from pathlib import Path
 import locale
+import threading
+import queue
+import sys
+import select
 
-from .genericlister import generic_lister
+from .genericlister import GenericLister
+from .jam import JamScreen
+from .simpleplay import SimplePlay
+
 
 locale.setlocale(locale.LC_ALL, '')
 code = locale.getpreferredencoding()
-
 
 def is_available():
     return curses is not None
 
 
 class UiCurses:
-    keymap = None
 
-    def __init__(self, *, config, keymaps=None, commands=None, cmdrecorder=None, lister=None, importer=None, player=None):
+    def __init__(self, config):
         self.project_dir = Path(config["instance"]["project_dir"])
         self.config = config
-        if keymaps is not None:
-            self.keymap = keymaps.keymap
-        self.commands = commands
-        self.cmdrecorder = cmdrecorder
-        self.lister = lister
-        self.importer = importer
-        self.player = player
+        self.wiring = {}
+        self.stdscrs = []
+        self._getch_queue = queue.Queue()
+        self._getch_thread = None
+        self.running = True
 
-    def jam(self):
-        curses.wrapper(self._jam)
+    def _terminate(self, stdscr):
+        self.running = False
+        if interrupt_main is None:
+            stdscr.clear()
+            stdscr.puts("Press any key to quit.")
+        else:
+            interrupt_main()
 
-    def list_it(self):
-        generic_lister(self.lister)
+    def wire(self, **wiring):
+        self.wiring = wiring
 
-    def import_it(self):
-        generic_lister(self.importer)
+    def _start(self, generator, logic=None):
+        curses.wrapper(self._start_up, generator, logic)
+
+    def _start_up(self, stdscr, generator, logic):
+        self.logic_thread = threading.Thread(target=self._switch(stdscr, generator, logic), daemon=True)
+        self.logic_thread.run()
+        self._getch_watcher(stdscr)
+
+    def start_jam(self):
+        return curses.wrapper(self.switch_jam)
+
+    def _getch_watcher(self, stdscr):
+        while self.running:
+            select.select([sys.stdin], [], [])
+            key = stdscr.getkey()
+            self._getch_queue.put(key)
+
+    def get_key(self, block=True, timeout=None):
+        if timeout:
+            check = select.select([sys.stdin], [], [], timeout)[0]
+            if len(check) == 0:
+                return None
+            # curses.halfdelay(timeout)
+            # try:
+            ret = self.stdscrs[-1].getkey()
+                # if ret == curses.ERR:
+                #     ret = None
+            # except:
+            #     ret = None
+            # finally:
+            #     curses.nocbreak()
+            #     curses.cbreak()
+        elif block:
+            ret = self.stdscrs[-1].getkey()
+        else:
+            self.stdscrs[-1].nodelay(1)
+            try:
+                ret = self.stdscrs[-1].getkey()
+                if ret == curses.ERR:
+                    ret = None
+            except:
+                ret = None
+            finally:
+                self.stdscrs[-1].nodelay(0)
+        return ret
+
+    def _switch(self, stdscr, generator, logic=None):
+        self.stdscrs.append(stdscr)
+        # if self._getch_thread is None:
+        #     self._getch_thread = threading.Thread(target=self._getch_watcher, daemon=True, args=(stdscr,))
+        #     self._getch_thread.run()
+        item = generator(self.config)
+        item.wire(logic=logic, **self.wiring)
+        ret = item(stdscr)
+        del self.stdscrs[-1]
+        # if len(self.stdscrs) == 0:
+        #     self._terminate(stdscr)
+        return ret
+
+    def switch_jam(self, stdscr):
+        return self._switch(stdscr, JamScreen)
+
+    def start_list(self):
+        return curses.wrapper(self.switch_list)
+
+    def switch_list(self, stdscr):
+        return self._switch(stdscr, GenericLister, logic="jam_lister")
+
+    def start_import(self):
+        return curses.wrapper(self.switch_import)
+        # self._start(GenericLister, logic="import_lister")
+
+    def switch_import(self, stdscr):
+        return self._switch(stdscr, GenericLister, logic="import_lister")
+
+    def play_ui(self, callback, *, seek=None):
+        p = SimplePlay(self.config)
+        p.wire(seek=seek, **self.wiring)
+        p(self.stdscrs[-1], callback)
 
     def read_string(self, prompt=""):
         global code
@@ -55,45 +144,17 @@ class UiCurses:
         curses.noecho()
         return str(s, code)
 
-    def _import(self, stdscr):
-        stdscr.keypad(True)
-        stdscr.scrollok(True)
-        self.stdscr = stdscr
-        self._pick_import_file()
-
-    def _jam(self, stdscr):
-        stdscr.keypad(True)
-        stdscr.scrollok(True)
-
-        self.stdscr = stdscr
-        ch = ""
-        command = ""
-        self.cmdrecorder.add("mark_good")
-        first_preset = "preset_0"
-        self.commands.execute(first_preset, ui=self)
-        self.cmdrecorder.add(first_preset)
-
-        while command != "quit":
-            if command is None:
-                self.putln("Unknown key: '{}' (len:{})".format(ch, len(ch)))
-            elif command != "":
-                self.cmdrecorder.add(command)
-                self.commands.execute(command, ui=self)
-            ch = stdscr.getkey()
-            command = self.keymap.get(ch)
-        self.commands.do_silence("silence")
-        self.commands.do_panic()
-        self.cmdrecorder.add("mark_bad")
-
     def puts(self, something):
-        maxx = self.stdscr.getmaxyx()[1]
-        x = self.stdscr.getyx()[1]
-        if x > maxx - 10:
-            self.stdscr.addstr("\n")
-        self.stdscr.addstr(something)
-        self.stdscr.refresh()
+        stdscr = self.stdscrs[-1]
+        max_x = stdscr.getmaxyx()[1]
+        x = stdscr.getyx()[1]
+        if x + len(something) >= max_x:
+            stdscr.addstr("\n")
+        stdscr.addstr(something)
+        stdscr.refresh()
 
     def putln(self, something):
-        self.stdscr.addstr(something)
-        self.stdscr.addstr("\n")
-        self.stdscr.refresh()
+        stdscr = self.stdscrs[-1]
+        stdscr.addstr(something)
+        stdscr.addstr("\n")
+        stdscr.refresh()

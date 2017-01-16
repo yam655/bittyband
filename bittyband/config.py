@@ -94,7 +94,7 @@ title = G Prometheus
 scale = rel:  1 b3 4 b5 5 b7 
 title = G Blues
 # 12 Bar Blues
-pad_sequence = I7-I7-I7-I7-IV7-IV7-I7-I7-V7-IV7-I7-V7
+pad_sequence = I:7-I:7-I:7-I:7-IV:7-IV:7-I:7-I:7-V:7-IV:7-I:7-V:7
 
 [preset_8]
 title = G Major alternate instrument
@@ -190,7 +190,7 @@ def load_home_config(args=None):
         home_dir.mkdir(parents=True, exist_ok=True)
         home_config = home_dir / "settings.conf"
         if home_config.exists():
-            config.read(home_config)
+            config.read(str(home_config))
             if "project" in config:
                 config["project"].clear()
             if "instance" in config:
@@ -226,6 +226,8 @@ def find_project_dir(project):
     if project is None:
         project = "."
     root = get_project_root()
+    if root is None:
+        root = Path()
     project_dir = Path(project)
     if "." == project:
         project_dir = Path(".")
@@ -233,13 +235,11 @@ def find_project_dir(project):
         if "projects" in config:
             if project in config["projects"]:
                 project_dir = Path(config["projects"].get(project))
-
-    if project_dir is None:
-        project_dir = Path(".", project)
-    if root is None:
-        project_dir = project_dir.expanduser()
+        project_dir = root.joinpath(project_dir.expanduser())
     else:
-        project_dir = root.joinpath(project_dir).expanduser()
+        project_dir = project_dir.expanduser()
+    if not project_dir.exists():
+        project_dir = root.joinpath(project_dir)
     if project_dir.is_dir():
         project_dir = project_dir.resolve()
     return project_dir
@@ -254,7 +254,7 @@ def load_project_config(args=None):
     project_dir = find_project_dir(args.project)
     conf_path = project_dir / "bittyband.conf"
     if not conf_path.exists():
-        raise ConfigError("Project has no configuration file.")
+        raise ConfigError("Project has no configuration file in {}".format(conf_path))
     config.read(str(conf_path))
     if config["project"].getint("version") < 1:
         raise ConfigError("Project is an unsupported version.")

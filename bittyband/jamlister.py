@@ -11,11 +11,10 @@ from .commands import Commands
 from .utils.time import human_duration
 
 
-class Lister:
+class JamLister:
 
-    def __init__(self, config, commands):
+    def __init__(self, config):
         self.config = config
-        self.commands = commands
         self.project_dir = Path(config["instance"]["project_dir"])
         self.streams_index = self.project_dir / "cmd-streams.index"
         self.marks = ConfigParser()
@@ -24,6 +23,9 @@ class Lister:
             self.marks.read(str(self.streams_index))
         else:
             self.scan()
+
+    def wire(self, *, push_commands, **kwargs):
+        self.commands = push_commands
 
     def _do_rename(self, title, line):
         if title == "" or title is None:
@@ -119,7 +121,8 @@ class Lister:
 
     def export_ly(self, what, output, title=""):
         exporter = ExportLy(self.config, output, title=title)
-        cmds = Commands(self.config, exporter, None, BackgroundNull())
+        cmds = Commands(self.config)
+        cmds.configure(exporter, None, BackgroundNull())
         exporter.start()
         cmds.play(self.get(what), realtime=False)
         exporter.end()
