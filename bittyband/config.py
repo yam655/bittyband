@@ -1,8 +1,6 @@
 #!/bin/env python3
 
-"""Handle arguments and configuration files."""
-
-__all__ = ["parse", "get_config"]
+__all__ = ["parse", "get_config", "get_project_dir"]
 
 import argparse
 import sys
