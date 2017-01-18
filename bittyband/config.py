@@ -1,6 +1,6 @@
 #!/bin/env python3
 
-__all__ = ["parse", "get_config", "get_project_dir"]
+__all__ = ["parse", "get_config"]
 
 import argparse
 import sys
