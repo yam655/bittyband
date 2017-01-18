@@ -1,7 +1,5 @@
 #!/bin/env python3
 
-"""Handle arguments and configuration files."""
-
 __all__ = ["parse", "get_config"]
 
 import argparse
@@ -30,6 +28,8 @@ def parse(argv):
     config = load_project_config(args)
     if hasattr(args, "mode"):
         config["instance"]["mode"] = args.mode
+        if args.mode == "importer":
+            config["instance"]["import-file"] = args.import_file
     else:
         config["instance"]["mode"] = "gui"
     return config
@@ -309,6 +309,9 @@ parser_test = subparsers.add_parser("test", description="Perform some internal t
 parser_test.set_defaults(mode="test")
 parser_test = subparsers.add_parser("panic", description="Perform a MIDI Panic and clear all notes.")
 parser_test.set_defaults(func=panic, mode="panic")
-parser_importer = subparsers.add_parser("import", description="Grand import mode")
-parser_importer.add_argument("-i", "--import", metavar="FILE", dest="import_file")
-parser_importer.set_defaults(mode="import")
+parser_importlist = subparsers.add_parser("import", description="Grand importer mode",)
+parser_importlist.add_argument("-i", "--import", metavar="FILE", dest="import_file")
+parser_importlist.set_defaults(mode="import")
+parser_importer = subparsers.add_parser("importer", description="Import specific file")
+parser_importer.add_argument("import_file", metavar="FILE", help="file in import directory")
+parser_importer.set_defaults(mode="importer")

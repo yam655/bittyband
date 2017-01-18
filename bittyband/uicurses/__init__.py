@@ -12,7 +12,6 @@ except ImportError:
 
 from pathlib import Path
 import locale
-import threading
 import queue
 import sys
 import select
@@ -20,6 +19,7 @@ import select
 from .genericlister import GenericLister
 from .jam import JamScreen
 from .simpleplay import SimplePlay
+from .spreader import Spreader
 
 
 locale.setlocale(locale.LC_ALL, '')
@@ -40,49 +40,15 @@ class UiCurses:
         self._getch_thread = None
         self.running = True
 
-    def _terminate(self, stdscr):
-        self.running = False
-        if interrupt_main is None:
-            stdscr.clear()
-            stdscr.puts("Press any key to quit.")
-        else:
-            interrupt_main()
-
     def wire(self, **wiring):
         self.wiring = wiring
-
-    def _start(self, generator, logic=None):
-        curses.wrapper(self._start_up, generator, logic)
-
-    def _start_up(self, stdscr, generator, logic):
-        self.logic_thread = threading.Thread(target=self._switch(stdscr, generator, logic), daemon=True)
-        self.logic_thread.run()
-        self._getch_watcher(stdscr)
-
-    def start_jam(self):
-        return curses.wrapper(self.switch_jam)
-
-    def _getch_watcher(self, stdscr):
-        while self.running:
-            select.select([sys.stdin], [], [])
-            key = stdscr.getkey()
-            self._getch_queue.put(key)
 
     def get_key(self, block=True, timeout=None):
         if timeout:
             check = select.select([sys.stdin], [], [], timeout)[0]
             if len(check) == 0:
                 return None
-            # curses.halfdelay(timeout)
-            # try:
             ret = self.stdscrs[-1].getkey()
-                # if ret == curses.ERR:
-                #     ret = None
-            # except:
-            #     ret = None
-            # finally:
-            #     curses.nocbreak()
-            #     curses.cbreak()
         elif block:
             ret = self.stdscrs[-1].getkey()
         else:
@@ -95,20 +61,20 @@ class UiCurses:
                 ret = None
             finally:
                 self.stdscrs[-1].nodelay(0)
+        if len(ret) == 1 and ord(ret) < 0x20:
+            ret = "^{}".format(chr(ord(ret) + ord('@')))
         return ret
 
     def _switch(self, stdscr, generator, logic=None):
         self.stdscrs.append(stdscr)
-        # if self._getch_thread is None:
-        #     self._getch_thread = threading.Thread(target=self._getch_watcher, daemon=True, args=(stdscr,))
-        #     self._getch_thread.run()
         item = generator(self.config)
         item.wire(logic=logic, **self.wiring)
         ret = item(stdscr)
         del self.stdscrs[-1]
-        # if len(self.stdscrs) == 0:
-        #     self._terminate(stdscr)
         return ret
+
+    def start_jam(self):
+        return curses.wrapper(self.switch_jam)
 
     def switch_jam(self, stdscr):
         return self._switch(stdscr, JamScreen)
@@ -121,28 +87,25 @@ class UiCurses:
 
     def start_import(self):
         return curses.wrapper(self.switch_import)
-        # self._start(GenericLister, logic="import_lister")
 
     def switch_import(self, stdscr):
         return self._switch(stdscr, GenericLister, logic="import_lister")
+
+    def start_import_file(self):
+        return curses.wrapper(self.switch_import_file)
+
+    def switch_import_file(self, stdscr = None):
+        if stdscr is None and len(self.stdscrs) > 0:
+            stdscr = self.stdscrs[-1]
+        ret = self._switch(stdscr, Spreader, logic="importer")
+        if len(self.stdscrs) > 0:
+            curses.ungetch(ord("L") - ord("@"))
+        return ret
 
     def play_ui(self, callback, *, seek=None):
         p = SimplePlay(self.config)
         p.wire(seek=seek, **self.wiring)
         p(self.stdscrs[-1], callback)
-
-    def read_string(self, prompt=""):
-        global code
-        y = self.stdscr.getmaxyx()[0]
-        self.stdscr.addstr(y - 2, 0, prompt)
-        self.stdscr.clrtoeol()
-        self.stdscr.move(y - 1, 0)
-        self.stdscr.clrtoeol()
-        self.stdscr.refresh()
-        curses.echo()
-        s = self.stdscr.getstr(y - 1, 0)
-        curses.noecho()
-        return str(s, code)
 
     def puts(self, something):
         stdscr = self.stdscrs[-1]

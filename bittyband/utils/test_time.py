@@ -46,5 +46,21 @@ class TestTime(unittest.TestCase):
         got = reasonable_time("1234567.89", local=False)
         self.assertEqual("(Thu) 1970-01-15 06:56", got, "Should get expected time")
 
+    def test_from_human_duration_minutes(self):
+        got = from_human_duration("1:23.34")
+        self.assertEqual(60 + 23.34, got)
+
+    def test_from_human_duration_seconds(self):
+        got = from_human_duration("23.34")
+        self.assertEqual(23.34, got)
+
+    def test_from_human_duration_hours(self):
+        got = from_human_duration("1:00:23")
+        self.assertEqual((60 * 60) + 23, got)
+
+    def test_from_human_duration_days(self):
+        got = from_human_duration("1:00:00:00")
+        self.assertEqual(24 * 60 * 60, got)
+
 if __name__ == '__main__':
     unittest.main()
