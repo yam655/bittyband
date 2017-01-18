@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Handle import of audio files"""
+"""Handle importer of audio files"""
 
 from pathlib import Path
 from configparser import ConfigParser
@@ -11,7 +11,7 @@ import time
 
 from .utils.time import human_duration, reasonable_time
 
-class ImporterBackend:
+class ImportLister:
     order = []
     data = {}
     ui = None
@@ -20,6 +20,7 @@ class ImporterBackend:
     play_length = None
 
     def __init__(self, config):
+        self.config = config
         self.project_dir = Path(config["instance"]["project_dir"])
 
     def wire(self, *, ui, **kwargs):
@@ -53,8 +54,9 @@ class ImporterBackend:
 
     def _do_play(self, line):
         datum = self.data[self.order[line]]
-        media = self.project_dir / "import" / datum["media"]
-        media = media.resolve()
+        # media = self.project_dir / "importer" / datum["media"]
+        # media = media.resolve()
+        media = datum["media"]
         self.play_length = datum["length_secs"]
         sound = pyglet.media.load(str(media))
         group = pyglet.media.SourceGroup(sound.audio_format, sound.video_format)
@@ -66,12 +68,15 @@ class ImporterBackend:
         self.ui.play_ui(self._play_status, seek=self._play_live_seek)
         self.player.pause()
 
+    def _do_importer(self, line):
+        self.config["instance"]["import-file"] = self.order[line]
+        self.ui.switch_import_file()
+
     def prepare_keys(self, lister):
-        # lister.register_key(self._do_rename, "R", "r", arg="?str",
-        #                     prompt="New title?",
-        #                     description="Rename the current marked segment")
         lister.register_key(self._do_play, "P", "p", arg="...slow", prompt="Playing...",
                             description="Play this file.")
+        lister.register_key(self._do_importer, "I", "i", "^J",
+                            description="Import this file")
 
     def get_order(self):
         return self.order
@@ -96,6 +101,11 @@ class ImporterBackend:
         width = max_len - len(suffix) - len(prefix)
         line = "{0}{1:{width}.{width}}{2}".format(prefix, title, suffix, width=width)
         return line
+
+    def get(self, what):
+        if not self.data:
+            self.scan()
+        return self.data.get(what)
 
     def scan(self):
         self.order = []
@@ -159,7 +169,8 @@ class ImporterBackend:
 
             self.order.append(metadata_file.stem)
             self.data[metadata_file.stem] = {
-                "media": str(media_file),
+                "media": str(media_file.resolve()),
+                "metadata": str(metadata_file.resolve()),
                 "title": title,
                 "total_length": total_length,
                 "length_secs": length_secs,

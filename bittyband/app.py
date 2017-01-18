@@ -8,7 +8,8 @@ from .ui import get_ui
 from .cmdrecorder import CommandRecorder
 from .jamlister import JamLister
 from .bgplayer import BackgroundDrums
-from .importer import ImporterBackend
+from .importer import Importer
+from .importlister import ImportLister
 
 def app(config):
     ui_maker = get_ui()
@@ -31,8 +32,14 @@ def app(config):
         mode = ui.start_list
 
     elif config["instance"]["mode"] == "import":
-        wiring["import_lister"] = ImporterBackend(config)
+        wiring["import_lister"] = ImportLister(config)
+        wiring["importer"] = Importer(config)
         mode = ui.start_import
+
+    elif config["instance"]["mode"] == "import-file":
+        wiring["import_lister"] = ImportLister(config)
+        wiring["importer"] = Importer(config)
+        mode = ui.start_import_file
 
     elif config["instance"]["mode"] == "test":
         pass

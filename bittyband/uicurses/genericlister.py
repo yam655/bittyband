@@ -27,11 +27,15 @@ class GenericLister:
         self.logic = kwargs[logic]
         self.logic.prepare_keys(self)
 
+    def refresh_status(self):
+        max_y, max_x = self.stdscr.getmaxyx()
+        self.stdscr.hline(max_y - 2, 0, "=", max_x)
+
     def refresh(self):
         global _INDICATOR_OFFSET
         self.stdscr.clear()
         max_y, max_x = self.stdscr.getmaxyx()
-        self.stdscr.hline(max_y - 2, 0, "=", max_x)
+        self.refresh_status()
         if len(self.logic.get_order()) == 0:
             self.stdscr.addstr(0, 0, ">  ", curses.A_REVERSE)
             self.stdscr.chgat(0, 0, curses.A_REVERSE)
@@ -104,17 +108,23 @@ class GenericLister:
     def _help_cmd(self, line):
         return True
 
+    def _refresh_cmd(self, line):
+        return True
+
     def _register_builtins(self):
-        self.register_key(self._quit_cmd, "Q", "q", "ESC",
+        self.register_key(self._quit_cmd, "Q", "q", "^]",
                           description="Quit")
         self.register_key(self._down_cmd, "KEY_DOWN",
                           description="Move down a row")
         self.register_key(self._up_cmd, "KEY_UP",
                           description="Move up a row")
-        self.register_key(self.refresh, "^L", "^R",
+        self.register_key(self._refresh_cmd, "^L", "^R",
                           description="Refresh the window")
         self.register_key(self._help_cmd, "?",
                           description="Show this help text")
+
+    def get_key(self):
+        return self.ui.get_key()
 
     def __call__(self, stdscr):
         self.stdscr = stdscr
@@ -124,12 +134,8 @@ class GenericLister:
         self.running = True
 
         while self.running:
-            ch = self.ui.get_key()
+            ch = self.get_key()
             old_active = self.active
-            if ch == "^]":
-                ch = "ESC"
-            elif ch == "^?":
-                ch = "DEL"
             if ch in self.keymap:
                 entry = self.keymap[ch]
                 if entry.arg is None:
