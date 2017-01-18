@@ -7,6 +7,7 @@ import time
 import pyglet
 
 from ..utils.time import human_duration, from_human_duration
+from .importcsvdialect import ImportCsvDialect
 
 
 class Importer:
@@ -72,6 +73,7 @@ class Importer:
         self.start_segment = self.order[line]
         self.end_segment = self.order[line + 1]
         self.spreader.show_status("Playing: {} to {}".format(human_duration(self.start_segment), human_duration(self.end_segment)))
+        self.player.seek(self.start_segment)
         if not self.player.playing:
             self.player.play()
 
@@ -89,10 +91,9 @@ class Importer:
             self.spreader.show_status(self.bits["title"])
             self._start_player()
         t = self.player.time
-        if self.end_segment is not None and t >= self.end_segment:
-            if self.player.playing:
-                self.player.seek(self.start_segment)
-                self.player.play()
+        if self.end_segment is not None and t >= self.end_segment-1:
+            self.player.seek(self.start_segment)
+            self.player.play()
         display = human_duration(t, floor=True)
         self.spreader.display_time(display)
         if not self.player.playing:
@@ -116,7 +117,8 @@ class Importer:
                 try:
                     newline = self.order.index(location)
                 except ValueError:
-                    pass
+                    self.update_order()
+                    newline = self.order.index(location)
             if newline is None:
                 was_playing = self.player.playing
                 self.add_row(location)
@@ -148,12 +150,14 @@ class Importer:
     def scan(self):
         self.import_file = self.config["instance"]["import-file"]
         self.bits = self.import_lister.get(self.import_file)
-        self.data_file = Path(self.bits["metadata"]).with_suffix(".csv")
+        self.data_file = Path(self.bits["metadata"]).with_suffix(".data")
         if self.data_file.exists():
-            with self.data_file.open() as csvfile:
-                data_reader = csv.DictReader(csvfile)
+            with self.data_file.open(newline="") as csvfile:
+                data_reader = csv.DictReader(csvfile, dialect=ImportCsvDialect)
                 for row in data_reader:
-                    self.data[row["location"]] = row
+                    location = float(row["location"])
+                    row["location"] = location
+                    self.data[location] = row
         if len(self.data) == 0:
             self.add_row(0.0, mark="START")
             self.add_row(self.bits["length_secs"], mark="END")
@@ -172,9 +176,9 @@ class Importer:
         self.save()
 
     def save(self):
-        with self.data_file.open("w") as csvfile:
+        with self.data_file.open("w", newline='') as csvfile:
             fieldnames = ['location', 'mark']
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames, dialect=ImportCsvDialect)
             writer.writeheader()
             for location in self.order:
                 writer.writerow(self.data[location])

@@ -115,7 +115,6 @@ class ImportLister:
         self.data = {}
         for f in import_dir.glob("*.[mM][pP]3"):
             metadata_file = f.with_suffix(".meta")
-            # data_file = f.with_suffix(".csv")
             lyrics_file = f.with_suffix(".txt")
             media_file = f.resolve()
             meta = ConfigParser()
