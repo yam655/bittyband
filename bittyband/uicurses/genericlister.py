@@ -19,6 +19,7 @@ class GenericLister:
         self.keymap = {}
         self.running = False
         self.ui = None
+        self.invalidate = False
 
     def wire(self, *, logic, ui, **kwargs):
         self.ui = ui
@@ -27,33 +28,50 @@ class GenericLister:
         self.logic = kwargs[logic]
         self.logic.prepare_keys(self)
 
-    def refresh_status(self):
+    def refresh_status(self, *, no_refresh=False):
         max_y, max_x = self.stdscr.getmaxyx()
         self.stdscr.hline(max_y - 2, 0, "=", max_x)
+        if not no_refresh:
+            self.stdscr.refresh()
+
+    def refresh_line(self, line, *, no_refresh=False):
+        if self.invalidate:
+            self.refresh()
+            return
+        if len(self.logic.get_order()) == 0:
+            return
+        max_y, max_x = self.stdscr.getmaxyx()
+        row = line - self.top
+        if row < 0 or row >= max_y:
+            return
+        bit = self.logic.get_order()[line]
+        title = self.logic.get_line(bit, max_x - _INDICATOR_OFFSET * 2)
+        if line == self.active:
+            self.stdscr.addstr(row, 0, ">  ", curses.A_REVERSE)
+            self.stdscr.addstr(row, _INDICATOR_OFFSET, title, curses.A_REVERSE)
+            self.stdscr.chgat(row, 0, curses.A_REVERSE)
+        else:
+            self.stdscr.addstr(row, _INDICATOR_OFFSET, title)
+            self.stdscr.chgat(row, 0, curses.A_NORMAL)
+        if not no_refresh:
+            self.stdscr.refresh()
 
     def refresh(self):
         global _INDICATOR_OFFSET
+        self.invalidate = False
         self.stdscr.clear()
         max_y, max_x = self.stdscr.getmaxyx()
-        self.refresh_status()
+        max_y -= 2
+        self.refresh_status(no_refresh=True)
         if len(self.logic.get_order()) == 0:
             self.stdscr.addstr(0, 0, ">  ", curses.A_REVERSE)
             self.stdscr.chgat(0, 0, curses.A_REVERSE)
             self.stdscr.addstr(0, _INDICATOR_OFFSET, "<no data>", curses.A_REVERSE)
             return
-        max_y, max_x = self.stdscr.getmaxyx()
-        max_y -= 2
         for y in range(0, max_y):
             if y + self.top >= len(self.logic.get_order()):
                 break
-            bit = self.logic.get_order()[y+self.top]
-            title = self.logic.get_line(bit, max_x - _INDICATOR_OFFSET * 2)
-            if y + self.top == self.active:
-                self.stdscr.addstr(self.active - self.top, 0, ">  ", curses.A_REVERSE)
-                self.stdscr.addstr(y, _INDICATOR_OFFSET, title, curses.A_REVERSE)
-                self.stdscr.chgat(y, 0, curses.A_REVERSE)
-            else:
-                self.stdscr.addstr(y, _INDICATOR_OFFSET, title)
+            self.refresh_line(y + self.top, no_refresh=True)
         self.stdscr.refresh()
 
     def show_status(self, what=""):
@@ -109,6 +127,7 @@ class GenericLister:
         return True
 
     def _refresh_cmd(self, line):
+        self.invalidate = True
         return True
 
     def _register_builtins(self):
@@ -140,33 +159,33 @@ class GenericLister:
                 entry = self.keymap[ch]
                 if entry.arg is None:
                     if entry.function(line=self.active):
-                        self.refresh()
+                        self.refresh_line(self.active)
                 elif entry.arg == "<self>":
                     if entry.function(self, line=self.active):
-                        self.refresh()
+                        self.refresh_line(self.active)
                 elif entry.arg == "?str":
                     s = self.read_string(entry.prompt)
                     if s is not None:
                         if entry.function(s, line=self.active):
-                            self.refresh()
+                            self.refresh_line(self.active)
                 elif entry.arg == "...slow":
                     self.show_status(entry.prompt)
                     if entry.function(line=self.active):
-                        self.refresh()
+                        self.refresh_line(self.active)
                     else:
                         self.show_status()
                 elif entry.arg == "?yN":
                     s = self.read_string(entry.prompt)
                     if s == "Y" or s == "y":
                         if entry.function(line=self.active):
-                            self.refresh()
+                            self.refresh_line(self.active)
                     else:
                         self.show_status("Skipped.")
                 elif entry.arg == "?Yn":
                     s = self.read_string(entry.prompt)
                     if s != "N" and s != "n":
                         if entry.function(line=self.active):
-                            self.refresh()
+                            self.refresh_line(self.active)
                     else:
                         self.show_status("Skipped.")
 
@@ -179,6 +198,7 @@ class GenericLister:
             elif old_active != self.active:
                 max_y = self.stdscr.getmaxyx()[0] - 2
                 self.stdscr.addstr(old_active - self.top, 0, " ")
+                old_top = self.top
                 if self.active < 0:
                     self.active = len(self.logic.get_order()) - 1
                     self.top = self.active - max_y // 2
@@ -195,7 +215,12 @@ class GenericLister:
                     self.top += max_y // 2
                     if self.top >= len(self.logic.get_order()):
                         self.top = 0
-                self.refresh()
+                if old_top != self.top:
+                    self.refresh()
+                else:
+                    self.refresh_line(old_active, no_refresh=True)
+                    self.refresh_line(self.active, no_refresh=True)
+                    self.stdscr.refresh()
 
 
 class KeyEntry:

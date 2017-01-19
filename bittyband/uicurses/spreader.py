@@ -17,7 +17,7 @@ class Spreader(GenericLister):
     def get_key(self):
         key = None
         while key is None:
-            key = self.ui.get_key(timeout=0.7)
+            key = self.ui.get_key(timeout=0.01)
             if self.idle_cmd is not None:
                 self.idle_cmd()
         return key
@@ -25,12 +25,13 @@ class Spreader(GenericLister):
     def register_idle(self, idle_cmd):
         self.idle_cmd = idle_cmd
 
-    def refresh_status(self):
+    def refresh_status(self, *, no_refresh = False):
         max_y, max_x = self.stdscr.getmaxyx()
         self.stdscr.hline(max_y - 2, 0, "=", max_x)
         self.display_time(no_refresh=True)
         self.stdscr.chgat(max_y - 2, 0, curses.A_BOLD)
-        self.stdscr.refresh()
+        if not no_refresh:
+            self.stdscr.refresh()
 
     def on_exit(self, func):
         self.exit_func = func
