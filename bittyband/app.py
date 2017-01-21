@@ -2,6 +2,7 @@
 
 import sys
 
+from .importer import CsvPlayer
 from .commands import Commands
 from .player import PushButtonPlayer
 from .ui import get_ui
@@ -34,11 +35,15 @@ def app(config):
     elif config["instance"]["mode"] == "import":
         wiring["import_lister"] = ImportLister(config)
         wiring["importer"] = Importer(config)
+        wiring["csv_player"] = CsvPlayer(config)
+        need_for_mode = ["push_player", "csv_player"]
         mode = ui.start_import
 
     elif config["instance"]["mode"] == "import-file":
         wiring["import_lister"] = ImportLister(config)
         wiring["importer"] = Importer(config)
+        wiring["csv_player"] = CsvPlayer(config)
+        need_for_mode = ["push_player", "csv_player"]
         mode = ui.start_import_file
 
     elif config["instance"]["mode"] == "test":

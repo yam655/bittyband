@@ -6,6 +6,7 @@ from .genericlister import GenericLister
 class Spreader(GenericLister):
     idle_cmd = None
     time = None
+    line = None
     exit_func = None
 
     def __init__(self, config):
@@ -29,6 +30,7 @@ class Spreader(GenericLister):
         max_y, max_x = self.stdscr.getmaxyx()
         self.stdscr.hline(max_y - 2, 0, "=", max_x)
         self.display_time(no_refresh=True)
+        self.display_line(no_refresh=True)
         self.stdscr.chgat(max_y - 2, 0, curses.A_BOLD)
         if not no_refresh:
             self.stdscr.refresh()
@@ -44,6 +46,16 @@ class Spreader(GenericLister):
             self.stdscr.addstr(max_y - 2, max_x - len(self.time), self.time)
         if not no_refresh:
             self.stdscr.chgat(max_y - 2, max_x - len(self.time), curses.A_BOLD)
+            self.stdscr.refresh()
+
+    def display_line(self, text = None, *, no_refresh=False):
+        max_y, max_x = self.stdscr.getmaxyx()
+        if text is not None:
+            self.line = "@{}".format(text)
+        if self.line is not None:
+            self.stdscr.addstr(max_y - 2, max_x - len(self.line) - len(self.time) - 1, self.line)
+        if not no_refresh:
+            self.stdscr.chgat(max_y - 2, max_x - len(self.line) - len(self.time) - 1, curses.A_BOLD)
             self.stdscr.refresh()
 
     def _quit_cmd(self, line):
