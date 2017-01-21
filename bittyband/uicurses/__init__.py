@@ -99,7 +99,8 @@ class UiCurses:
             stdscr = self.stdscrs[-1]
         ret = self._switch(stdscr, Spreader, logic="importer")
         if len(self.stdscrs) > 0:
-            curses.ungetch(ord("L") - ord("@"))
+            # curses.ungetch(ord("L") - ord("@"))
+            curses.ungetch("Q")
         return ret
 
     def play_ui(self, callback, *, seek=None):

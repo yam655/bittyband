@@ -26,9 +26,15 @@ class PushButtonPlayer:
     def wire(self, **kwargs):
         pass
 
+    def new_track(self, **kwargs):
+        pass
+
+    def unknown_track(self):
+        pass
+
     def start(self):
         if self.thread is None:
-            self.thread = threading.Thread(target=self.player)
+            self.thread = threading.Thread(target=self._runner)
             self.thread.start()
 
     def end(self):
@@ -36,7 +42,7 @@ class PushButtonPlayer:
             self.queue.join()
             self.queue.put(None)
 
-    def player(self):
+    def _runner(self):
         with mido.open_output(self.midiport) as output:
             while True:
                 message = self.queue.get()
@@ -47,6 +53,8 @@ class PushButtonPlayer:
         self.thread = None
         self.queue = None
 
+    def feed_lyric(self, lyric, **kwargs):
+        pass
     def feed_comment(self, cmt, **kwargs):
         pass
     def feed_other(self, cmd, **kwargs):

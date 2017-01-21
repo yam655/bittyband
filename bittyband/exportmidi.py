@@ -21,6 +21,12 @@ class ExportMidi:
     def reconfigure(self, config):
         pass
 
+    def new_track(self, **kwargs):
+        pass
+
+    def unknown_track(self):
+        pass
+
     def start(self):
         self.track = MidiTrack()
         self.midifile = MidiFile()
@@ -37,6 +43,9 @@ class ExportMidi:
     def feed_other(self, cmd, **kwargs):
         pass
     def sync_comment(self, cmt, **kwargs):
+        pass
+
+    def feed_lyric(self, lyric, **kwargs):
         pass
 
     def feed_midi(self, *what, ui=None, abbr=None, channel=None, time=None): 

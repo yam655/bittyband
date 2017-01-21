@@ -116,11 +116,11 @@ class GenericLister:
         return False
 
     def _up_cmd(self, line):
-        self.active -= 1
+        self.move_to(self.active - 1)
         return False
 
     def _down_cmd(self, line):
-        self.active += 1
+        self.move_to(self.active + 1)
         return False
 
     def _help_cmd(self, line):
@@ -154,7 +154,6 @@ class GenericLister:
 
         while self.running:
             ch = self.get_key()
-            old_active = self.active
             if ch in self.keymap:
                 entry = self.keymap[ch]
                 if entry.arg is None:
@@ -193,34 +192,34 @@ class GenericLister:
             else:
                 self.show_status("Unknown key: {}".format(ch))
 
-            if old_active == -1:
-                self.active = old_active
-            elif old_active != self.active:
-                max_y = self.stdscr.getmaxyx()[0] - 2
-                self.stdscr.addstr(old_active - self.top, 0, " ")
-                old_top = self.top
-                if self.active < 0:
-                    self.active = len(self.logic.get_order()) - 1
-                    self.top = self.active - max_y // 2
-                    if self.top < 0:
-                        self.top = 0
-                elif self.active - self.top < 0:
-                    self.top -= max_y // 2
-                    if self.top < 0:
-                        self.top = 0
-                elif self.active >= len(self.logic.get_order()):
-                    self.active = 0
-                    self.top = 0
-                elif self.active - self.top >= max_y:
-                    self.top += max_y // 2
-                    if self.top >= len(self.logic.get_order()):
-                        self.top = 0
-                if old_top != self.top:
-                    self.refresh()
-                else:
-                    self.refresh_line(old_active, no_refresh=True)
-                    self.refresh_line(self.active, no_refresh=True)
-                    self.stdscr.refresh()
+    def move_to(self, line):
+        old_active = self.active
+        self.active = line
+        max_y = self.stdscr.getmaxyx()[0] - 2
+        self.stdscr.addstr(old_active - self.top, 0, " ")
+        old_top = self.top
+        if self.active < 0:
+            self.active = len(self.logic.get_order()) - 1
+            self.top = self.active - max_y // 2
+            if self.top < 0:
+                self.top = 0
+        elif self.active - self.top < 0:
+            self.top -= max_y // 2
+            if self.top < 0:
+                self.top = 0
+        elif self.active >= len(self.logic.get_order()):
+            self.active = 0
+            self.top = 0
+        elif self.active - self.top >= max_y:
+            self.top += max_y // 2
+            if self.top >= len(self.logic.get_order()):
+                self.top = 0
+        if old_top != self.top:
+            self.refresh()
+        else:
+            self.refresh_line(old_active, no_refresh=True)
+            self.refresh_line(self.active, no_refresh=True)
+            self.stdscr.refresh()
 
 
 class KeyEntry:

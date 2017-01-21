@@ -161,7 +161,7 @@ class ImportLister:
             length_secs = float(meta["audio"]["length"])
             total_length = human_duration(length_secs)
             timestamp =  reasonable_time(float(meta["audio"]["created"]))
-            tracks = int(meta["audio"]["tracks"])
+            tracks = int(meta["audio"].get("tracks",0))
             unprocessed_length = None
             if "unprocessed_length" in meta["audio"]:
                 unprocessed_length = human_duration(float(meta["audio"]["unprocessed_length"]))
