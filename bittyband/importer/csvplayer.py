@@ -22,6 +22,7 @@ class CsvPlayer:
         self.playing = False
         self.realtime = True
         self.skip_nap = False
+        self.exporting = False
 
     def wire(self, *, importer, push_player, realtime=True, **kwargs):
         self.importer = importer
@@ -56,17 +57,23 @@ class CsvPlayer:
     def pause(self):
         self.playing = False
 
+    def export(self):
+        self.__line = 0
+        self.exporting = True
+        while self.__line < len(self.importer.order):
+            self._play_line()
 
     def _play_line(self):
         global LEAD_CHANNEL
         global PAD_CHANNEL
-        if not self.playing:
+        if not self.playing and not self.exporting:
             time.sleep(0.00001)
             return
         try:
             datum = self.importer.data[self.importer.order[self.__line]]
         except IndexError:
-            self.__line = 0
+            if self.playing:
+                self.__line = 0
             if len(self.importer.data) == 0:
                 self.playing = False
                 return
@@ -85,17 +92,17 @@ class CsvPlayer:
                                           program=self.track_info["pad_instrument"], time=0))
         message_time = datum["location"] - self.last_location
         self.last_location = datum["location"]
-        if self.realtime and message_time > 0:
+        if not self.exporting and self.realtime and message_time > 0:
             if not self.skip_nap:
                 time.sleep(message_time)
             else:
                 self.skip_nap = False
         else:
             self.message_time += int(message_time / 1000)
-        if not self.playing:
+        if not self.playing and not self.exporting:
             return
         self.__line += 1
-        if self.__line >= len(self.importer.order):
+        if self.__line >= len(self.importer.order) and not self.exporting:
             self.__line = 0
         new_pad = datum.get("chord_value")
         if new_pad is not None:

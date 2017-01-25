@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import curses
+import curses.ascii
 import locale
 
 from ..errors import ConfigError
@@ -9,6 +10,113 @@ locale.setlocale(locale.LC_ALL, '')
 _code = locale.getpreferredencoding()
 
 _INDICATOR_OFFSET = 2
+
+
+class FieldReader:
+    def __init__(self, getcher, stdscr, y, x1, x2):
+        self.stdscr = stdscr
+        self.getcher = getcher
+        self.y = y
+        self.x1 = x1
+        self.data = []
+        self.x2 = x2
+        self.cursor = x1
+
+    def move(self, x = None):
+        if x is not None:
+            if x < self.x1 or x >= self.x2:
+                return
+            self.stdscr.chgat(self.y, self.cursor, 1, curses.A_NORMAL)
+            self.cursor = x
+        self.stdscr.chgat(self.y, self.cursor, 1, curses.A_REVERSE)
+
+    def do_command(self, key):
+        # self.lastcmd = ch
+        if len(key) == 1:
+            if self.cursor < self.x2:
+                if self.cursor - self.x1 == len(self.data):
+                    self.data.append(key)
+                    self.stdscr.addstr(self.y, self.cursor, key)
+                else:
+                    self.data.insert(self.cursor - self.x1, key)
+                    self.refresh()
+                self.move(self.cursor + 1)
+        elif key == "^A":
+            self.move(self.x1)
+            self.refresh()
+        elif key in ("^B", "KEY_LEFT", "^H", "KEY_BACKSPACE", "^?"):
+            if self.cursor == 0:
+                return False
+            self.move(self.cursor - 1)
+            if key in ("^H", "KEY_BACKSPACE", "^?"):
+                self.stdscr.delch()
+                del self.data[self.cursor - self.x1]
+            self.refresh()
+        elif key == "^D":
+            self.stdscr.delch()
+            del self.data[self.cursor - self.x1]
+            self.refresh()
+        elif key == "^E":
+            self.move(self.x1 + len(self.data))
+            self.refresh()
+        elif key in ("^F", "KEY_RIGHT"):
+            if self.cursor < self.x2 and self.cursor - self.x1 < len(self.data):
+                self.move(self.cursor + 1)
+                self.refresh()
+        elif key in "^G":
+            self.data = []
+            return False
+        elif key in ("^J", "KEY_ENTER"):
+            return False
+        elif key == "^K":
+            self.data = self.data[:self.cursor - self.x1]
+            self.refresh()
+        elif key == "^L":
+            self.refresh()
+        elif key in ("^N", "KEY_DOWN"):
+            buf = "".join(self.data)
+            i = self.cursor - self.x1
+            if i < len(buf):
+                if buf[i].isspace():
+                    while i < len(buf) and buf[i].isspace():
+                        i += 1
+                while i < len(buf) and not buf[i].isspace():
+                    i += 1
+                self.move(i + self.x1)
+                self.stdscr.refresh()
+        elif key in ("^P", "KEY_UP"):
+            buf = "".join(self.data)
+            i = self.cursor - self.x1
+            if i >= len(buf):
+                i = len(buf) - 1
+            if buf[i].isspace():
+                while i >= 0 and buf[i].isspace():
+                    i -= 1
+            while i >= 0 and not buf[i].isspace():
+                i -= 1
+            self.move(i + self.x1)
+            self.stdscr.refresh()
+        return True
+
+    def refresh(self):
+        self.stdscr.move(self.y, self.x1)
+        self.stdscr.addstr("".join(self.data))
+        self.stdscr.clrtoeol()
+        self.move()
+        self.stdscr.refresh()
+
+    def get(self, initial=""):
+        self.data = list(initial)
+        self.cursor = self.x1 + len(initial)
+        self.refresh()
+        while 1:
+            key = self.getcher.get_key()
+            if not self.do_command(key):
+                break
+        self.stdscr.move(self.y, self.x1)
+        self.stdscr.clrtoeol()
+        self.stdscr.refresh()
+        return "".join(self.data)
 
 
 class GenericLister:
@@ -82,7 +190,7 @@ class GenericLister:
         self.stdscr.clrtoeol()
         self.stdscr.refresh()
 
-    def read_string(self, prompt=""):
+    def read_string(self, prompt="", initial=""):
         global _code
         max_y, max_x = self.stdscr.getmaxyx()
         self.stdscr.addstr(max_y - 2, 0, prompt)
@@ -90,23 +198,21 @@ class GenericLister:
         self.stdscr.move(max_y - 1, 0)
         self.stdscr.clrtoeol()
         self.stdscr.refresh()
-        curses.echo()
-        s = self.stdscr.getstr(max_y - 1, 0)
-        curses.noecho()
+        s = FieldReader(self, self.stdscr, max_y - 1, 0, max_x).get(initial)
         self.stdscr.hline(max_y - 2, 0, "=", max_x)
         self.stdscr.addstr(" ")
         self.stdscr.move(max_y - 1, 0)
         self.stdscr.clrtoeol()
-        return str(s, _code)
+        return s
 
     def add_variant(self, orig_key, new_key):
         self.keymap[orig_key].keys.append(new_key)
         self.keymap[new_key] = self.keymap[orig_key]
 
-    def register_key(self, function, key, *variants, prompt="Enter value:", arg=None, description=None):
+    def register_key(self, function, key, *variants, prompt="Enter value:", arg=None, description=None, query=False):
         keys = [key]
         keys.extend(variants)
-        entry = KeyEntry(function=function, prompt=prompt, arg=arg, keys=keys, description=description)
+        entry = KeyEntry(function=function, prompt=prompt, arg=arg, keys=keys, description=description, query=query)
         self.keymap[key] = entry
         for k in variants:
             self.keymap[k] = entry
@@ -163,7 +269,10 @@ class GenericLister:
                     if entry.function(self, line=self.active):
                         self.refresh_line(self.active)
                 elif entry.arg == "?str":
-                    s = self.read_string(entry.prompt)
+                    initial = ""
+                    if entry.query:
+                        initial = entry.function(None, line=-self.active)
+                    s = self.read_string(entry.prompt, initial=initial)
                     if s is not None:
                         if entry.function(s, line=self.active):
                             self.refresh_line(self.active)
@@ -223,9 +332,10 @@ class GenericLister:
 
 
 class KeyEntry:
-    def __init__(self, *, function, keys, prompt, arg, description):
+    def __init__(self, *, function, keys, prompt, arg, description, query):
         self.function = function
         self.keys = keys
         self.prompt = prompt
         self.arg = arg
         self.description = description
+        self.query = query

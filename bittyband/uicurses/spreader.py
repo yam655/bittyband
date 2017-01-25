@@ -18,9 +18,10 @@ class Spreader(GenericLister):
     def get_key(self):
         key = None
         while key is None:
-            key = self.ui.get_key(timeout=0.01)
-            if self.idle_cmd is not None:
-                self.idle_cmd()
+            key = self.ui.get_key(timeout=0.5)
+            if key is None:
+                if self.idle_cmd is not None:
+                    self.idle_cmd()
         return key
 
     def register_idle(self, idle_cmd):
@@ -39,6 +40,8 @@ class Spreader(GenericLister):
         self.exit_func = func
 
     def display_time(self, text = None, *, no_refresh=False):
+        if text == self.time and not no_refresh:
+            return
         max_y, max_x = self.stdscr.getmaxyx()
         if text is not None:
             self.time = "[{}]".format(text)
@@ -49,6 +52,8 @@ class Spreader(GenericLister):
             self.stdscr.refresh()
 
     def display_line(self, text = None, *, no_refresh=False):
+        if text == self.line and not no_refresh:
+            return
         max_y, max_x = self.stdscr.getmaxyx()
         if text is not None:
             self.line = "@{}".format(text)
@@ -63,3 +68,4 @@ class Spreader(GenericLister):
         if self.exit_func is not None:
             self.exit_func()
         return False
+

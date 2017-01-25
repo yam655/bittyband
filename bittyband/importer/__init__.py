@@ -10,6 +10,10 @@ from .csvplayer import CsvPlayer
 from ..utils.cmdutils import *
 from ..utils.time import human_duration, from_human_duration
 from .importcsvdialect import ImportCsvDialect
+from ..bgplayer import BackgroundNull
+from ..exportly import ExportLy
+from ..exportmidi import ExportMidi
+from ..exporttxt import ExportTxt
 
 
 class Importer:
@@ -23,6 +27,7 @@ class Importer:
         self.start_line = 0
         self.end_segment = None
         self.song_data = {}
+        self.project_dir = Path(config["instance"]["project_dir"])
 
     def wire(self, *, ui, import_lister, csv_player, **kwargs):
         self.ui = ui
@@ -113,15 +118,15 @@ class Importer:
             self.spreader.show_status(self.bits["title"])
             self._start_player()
         t = self.player.time
-        if self.end_segment is not None and t >= self.end_segment:
+        if self.player.playing and self.end_segment is not None and t >= self.end_segment:
             self.player.seek(self.start_segment)
             self.csv_player.seek(self.start_line)
             self.player.play()
             self.csv_player.play()
-        display = human_duration(t, floor=True)
-        self.spreader.display_time(display)
-        display = human_duration(self.order[self.csv_player.line-1], floor=1)
-        self.spreader.display_line(display)
+        # display = human_duration(t, floor=True)
+        # self.spreader.display_time(display)
+        # display = human_duration(self.order[self.csv_player.line-1], floor=1)
+        # self.spreader.display_line(display)
         if not self.player.playing:
             if len(self.order) != len(self.data):
                 self.update_order()
@@ -298,10 +303,27 @@ class Importer:
         self.spreader.move_to(newline)
 
     def _do_lyric(self, lyric, *, line):
-        self.data[self.order[line]]["lyric"] = lyric
+        if line < 0 or lyric is None:
+            return self.data[self.order[-line]].get("lyric","")
+        self.data[self.order[line]]["lyric"] = lyric.strip()
+        return True
+
+    def _do_line_mark(self, *, line):
+        lyric = self.data[self.order[line]].get("lyric", "")
+        if lyric == "":
+            self.data[self.order[line]]["lyric"] = "/"
+            return
+        if lyric[0] == '/':
+            self.data[self.order[line]]["lyric"] = "\\" + self.data[self.order[line]]["lyric"][1:]
+        elif lyric[0] == '\\':
+            self.data[self.order[line]]["lyric"] = self.data[self.order[line]]["lyric"][1:]
+        else:
+            self.data[self.order[line]]["lyric"] = "/" + self.data[self.order[line]]["lyric"]
         return True
 
     def _do_mark(self, mark, *, line):
+        if line < 0 or mark is None:
+            return self.data[self.order[-line]].get("mark","")
         self.data[self.order[line]]["mark"] = mark
         return True
 
@@ -330,10 +352,75 @@ class Importer:
                 continue
             data_to[k], data_from[k] = data_from[k], data_to.get(k,"")
 
+    def _do_export_midi(self, filename, line):
+        if filename is None or len(filename.strip()) == 0:
+            self.export_midi(self.project_dir / "{}.midi".format("export"))
+        else:
+            self.export_midi(self.project_dir / filename)
+        return False
+
+    def _do_export_lily(self, filename, line):
+        if filename is None or len(filename.strip()) == 0:
+            self.export_ly(self.project_dir / "{}.ly".format("export"))
+        else:
+            self.export_ly(self.project_dir / filename)
+        return False
+
+    def _do_export_txt(self, filename, line):
+        if filename is None or len(filename.strip()) == 0:
+            self.export_txt(self.project_dir / "{}.txt".format("export"))
+        else:
+            self.export_txt(self.project_dir / filename)
+        return False
+
+    def export_midi(self, output):
+        exporter = ExportMidi(self.config, output)
+        csvplayr = CsvPlayer(self.config)
+        csvplayr.wire(importer=self, push_player=exporter, realtime=False)
+        exporter.start()
+        csvplayr.export()
+        exporter.end()
+
+    def export_txt(self, output):
+        exporter = ExportTxt(self.config, output)
+        csvplayr = CsvPlayer(self.config)
+        csvplayr.wire(importer=self, push_player=exporter, realtime=False)
+        exporter.start()
+        csvplayr.export()
+        exporter.end()
+
+    def export_ly(self, output):
+        exporter = ExportLy(self.config, output)
+        csvplayr = CsvPlayer(self.config)
+        csvplayr.wire(importer=self, push_player=exporter, realtime=False)
+        exporter.start()
+        csvplayr.export()
+        exporter.end()
+
     def prepare_keys(self, spreader):
         self.spreader = spreader
         spreader.register_idle(self._do_idle)
         spreader.on_exit(self.save)
+        """ Key commands:
+            ^J : Go to line and repeat
+            ^N / 'j' / 'J' : shift down by half
+            ^P / 'k' / 'K' : shift up by half
+            '@' : jump to or create by timecode
+            '.' : mark current audio location as a beat
+            '"' / 'L' / 'l' : enter lyrics for row
+                - Start with '/' for new line.
+                - Start with '\\' for new row
+            'C' / 'c' : change the chord
+            'D' / 'd' : delete row
+            'E' / 'e' : export to MIDI
+            'H' / 'h' : play just the chords
+            'M' / 'm' : set a marker
+                - Start with '*' or '-' for a "point" marker (currently normal markers unimplemented)
+            'P' / 'p' : play Audio + MIDI
+            'T' / 't' : mark as start of track
+            'X' / 'x' : export as plain text
+            'Y' / 'y' : export to Lilypond
+        """
         spreader.register_key(self._do_play, "P", "p", arg="...slow", prompt="Playing...",
                             description="Play this file.")
         spreader.register_key(self._do_play_segment, "^J",
@@ -346,9 +433,9 @@ class Importer:
                               description="Jump to or create by timecode")
         spreader.register_key(self._do_track, "t", "T",
                               description="Mark as start of track")
-        spreader.register_key(self._do_lyric, '"', "L", 'l', arg="?str", prompt="Lyric?",
+        spreader.register_key(self._do_lyric, '"', "L", 'l', arg="?str", prompt="Lyric?", query=True,
                               description="Enter lyric for this note")
-        spreader.register_key(self._do_mark, "M", "m", arg="?str", prompt="How would you like to mark it?",
+        spreader.register_key(self._do_mark, "M", "m", arg="?str", prompt="How would you like to mark it?",query=True,
                               description="Mark this segment with some text.")
         spreader.register_key(self._do_chord, "c", "C",
                               description="Change the chord")
@@ -358,6 +445,17 @@ class Importer:
                               description="Shift this note half way between the current spot and the one below it.")
         spreader.register_key(self._do_shift_up, "k", "K", "^P",
                               description="Shift this note half way between the current spot and the one above it.")
+        spreader.register_key(self._do_export_midi, "E", "e", arg="?str",
+                            prompt="Export to MIDI (^G to cancel; ENTER to name 'export.midi'.]",
+                            description="Export to MIDI")
+        spreader.register_key(self._do_export_lily, "Y", "y", arg="?str",
+                            prompt="Export to Lilypond (^G to cancel; ENTER to name 'export.ly'.]",
+                            description="Export to Lilypond file")
+        spreader.register_key(self._do_export_txt, "X", "x", arg="?str",
+                            prompt="Export to plain text  (^G to cancel; ENTER to name 'export.txt'.]",
+                            description="Export to text file")
+        spreader.register_key(self._do_line_mark, "/",
+                              description="change the line separator indicator in the lyrics")
 
     def scan(self):
         self.import_file = self.config["instance"]["import-file"]

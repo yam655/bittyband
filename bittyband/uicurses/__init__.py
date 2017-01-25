@@ -61,8 +61,11 @@ class UiCurses:
                 ret = None
             finally:
                 self.stdscrs[-1].nodelay(0)
-        if len(ret) == 1 and ord(ret) < 0x20:
-            ret = "^{}".format(chr(ord(ret) + ord('@')))
+        if len(ret) == 1:
+            if ord(ret) < 0x20:
+                ret = "^{}".format(chr(ord(ret) + ord('@')))
+            elif ord(ret) == 0x7f:
+                ret = "^?"
         return ret
 
     def _switch(self, stdscr, generator, logic=None):
