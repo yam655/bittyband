@@ -157,7 +157,7 @@ class LilypondFile:
             if isinstance(self.lyrics[0], str):
                 result.append("words = {")
                 result.append('%    \\set stanza = #"1. "')
-                for lne in self.lyrics[idx]:
+                for lne in self.lyrics:
                     result.append('    {}'.format(lne))
                 result.append("}")
                 result.append("")
@@ -415,7 +415,7 @@ def number_suffix(idx, totl):
             ret.append(c)
     return "".join(ret)
 
-def quote_as_needed(self, text):
+def quote_as_needed(text):
     if text.isalpha():
         return text
     return '"{}"'.format(text.replace("\\","\\\\").replace('"', r'\"'))

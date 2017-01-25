@@ -77,7 +77,7 @@ class JamLister:
         lister.register_key(self._do_export_midi, "M", "m", arg="?str",
                             prompt="Export to MIDI (^G to cancel; ENTER to name based on segment.]",
                             description="Export to MIDI")
-        lister.register_key(self._do_export_lily, "L", "l", arg="?str",
+        lister.register_key(self._do_export_lily, "Y", "y", "L", "l", arg="?str",
                             prompt="Export to Lilypond (^G to cancel; ENTER to name based on segment.]",
                             description="Export to Lilypond file")
 
@@ -114,7 +114,8 @@ class JamLister:
 
     def export_midi(self, what, output):
         exporter = ExportMidi(self.config, output)
-        cmds = Commands(self.config, exporter, None, BackgroundNull())
+        cmds = Commands(self.config)
+        cmds.wire(push_player=exporter, metronome=BackgroundNull())
         exporter.start()
         cmds.play(self.get(what), realtime=False)
         exporter.end()
@@ -122,7 +123,7 @@ class JamLister:
     def export_ly(self, what, output, title=""):
         exporter = ExportLy(self.config, output, title=title)
         cmds = Commands(self.config)
-        cmds.configure(exporter, None, BackgroundNull())
+        cmds.wire(push_player=exporter, metronome=BackgroundNull())
         exporter.start()
         cmds.play(self.get(what), realtime=False)
         exporter.end()
