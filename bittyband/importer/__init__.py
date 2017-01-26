@@ -5,15 +5,17 @@ from pathlib import Path
 from configparser import ConfigParser
 
 import pyglet
+from mido import Message
 
+from ..midinames import getLyForMidiNote
 from .csvplayer import CsvPlayer
 from ..utils.cmdutils import *
 from ..utils.time import human_duration, from_human_duration
 from .importcsvdialect import ImportCsvDialect
-from ..bgplayer import BackgroundNull
 from ..exportly import ExportLy
 from ..exportmidi import ExportMidi
 from ..exporttxt import ExportTxt
+from ..commands import LEAD_CHANNEL, PAD_CHANNEL
 
 
 class Importer:
@@ -27,12 +29,14 @@ class Importer:
         self.start_line = 0
         self.end_segment = None
         self.song_data = {}
+        self.last_note = None
         self.project_dir = Path(config["instance"]["project_dir"])
 
-    def wire(self, *, ui, import_lister, csv_player, **kwargs):
+    def wire(self, *, ui, import_lister, csv_player, push_player, **kwargs):
         self.ui = ui
         self.import_lister = import_lister
         self.csv_player = csv_player
+        self.push_player = push_player
 
     def _play_live_seek(self, seconds):
         if seconds < 0 and self.player.time + seconds >= 0:
@@ -170,14 +174,12 @@ class Importer:
     def _do_chord(self, *, line):
         datum = self.data[self.order[line]]
         got = datum.get("chord-change","")
-        if got == "":
-            last = ""
-            for i in range(line - 1, -1, -1):
-                d = self.data[self.order[line]]
-                last = d.get("chord-change", "")
-                if last != "":
-                    got = last
-                    break
+        # if got == "":
+        #     for i in range(line - 1, -1, -1):
+        #         d = self.data[self.order[i]]
+        #         last = d.get("chord-change", "")
+        #         if last != "":
+        #             break
 
         idx = self._chord_options.index(got)
         idx += 1
@@ -327,6 +329,31 @@ class Importer:
         self.data[self.order[line]]["mark"] = mark
         return True
 
+    def _do_clone_up(self, *, line):
+        self._do_clone(line, -1)
+
+    def _do_clone_down(self, *, line):
+        self._do_clone(line, +1)
+
+    def _do_clone(self, line, dir = 1):
+        base = self.order[line]
+        if line + 1 == len(self.order):
+            return
+        next = self.order[line+dir]
+        offset = (next - base) / 2
+        if offset < 0.0005 and offset > -0.0005:
+            return
+        loc = base + offset
+        self._perform_jump(loc, callback=self.clone_goodies, callback_args={"from_loc":base})
+
+    def clone_goodies(self, to_loc, from_loc):
+        data_from = self.data[from_loc]
+        data_to = self.data[to_loc]
+        for k in data_from.keys():
+            if k == "location":
+                continue
+            data_to[k] = data_from[k]
+
     def _do_shift_up(self, *, line):
         self._do_shift(line, -1)
 
@@ -352,21 +379,21 @@ class Importer:
                 continue
             data_to[k], data_from[k] = data_from[k], data_to.get(k,"")
 
-    def _do_export_midi(self, filename, line):
+    def _do_export_midi(self, filename, *, line):
         if filename is None or len(filename.strip()) == 0:
             self.export_midi(self.project_dir / "{}.midi".format("export"))
         else:
             self.export_midi(self.project_dir / filename)
         return False
 
-    def _do_export_lily(self, filename, line):
+    def _do_export_lily(self, filename, *, line):
         if filename is None or len(filename.strip()) == 0:
             self.export_ly(self.project_dir / "{}.ly".format("export"))
         else:
             self.export_ly(self.project_dir / filename)
         return False
 
-    def _do_export_txt(self, filename, line):
+    def _do_export_txt(self, filename, *, line):
         if filename is None or len(filename.strip()) == 0:
             self.export_txt(self.project_dir / "{}.txt".format("export"))
         else:
@@ -397,6 +424,177 @@ class Importer:
         csvplayr.export()
         exporter.end()
 
+    def _do_lead_rest(self, *, line):
+        datum = self.data[self.order[line]]
+        datum["note"] = ""
+        datum["note_ui"] = "-"
+        return True
+
+    def _do_up_note(self, *, line):
+        datum = self.data[self.order[line]]
+        track_id = datum.get("track_id", -1)
+        got = datum.get("note","")
+        if got == "":
+            got = self.last_note
+            if got == "" or got is None:
+                song_stuff = self.song_data.get(track_id)
+                got = song_stuff["key_note"]
+        else:
+            got += 1
+            if got >= 128:
+                got -= 120
+        got = abs(got) % 128
+        self.last_note = got
+        datum["note"] = got
+        datum["note_ui"] = getLyForMidiNote(got)
+        # self.spreader.refresh_line(line)
+        return True
+
+    def _do_down_note(self, *, line):
+        datum = self.data[self.order[line]]
+        track_id = datum.get("track_id", -1)
+        got = datum.get("note","")
+        if got == "":
+            got = self.last_note
+            if got == "" or got is None:
+                song_stuff = self.song_data.get(track_id)
+                got = song_stuff["key_note"]
+        else:
+            got -= 1
+            if got < 0:
+                got += 120
+        got = abs(got) % 128
+        self.last_note = got
+        datum["note"] = got
+        datum["note_ui"] = getLyForMidiNote(got)
+        # self.spreader.refresh_line(line)
+        return True
+
+    def _do_up_octave(self, *, line):
+        datum = self.data[self.order[line]]
+        track_id = datum.get("track_id", -1)
+        got = datum.get("note","")
+        if got == "":
+            got = self.last_note
+            if got == "" or got is None:
+                song_stuff = self.song_data.get(track_id)
+                got = song_stuff["key_note"]
+        else:
+            got += 12
+            if got >= 128:
+                got -= 120
+        got = abs(got) % 128
+        self.last_note = got
+        datum["note"] = got
+        datum["note_ui"] = getLyForMidiNote(got)
+        # self.spreader.refresh_line(line)
+        return True
+
+    def _do_down_octave(self, *, line):
+        datum = self.data[self.order[line]]
+        track_id = datum.get("track_id", -1)
+        got = datum.get("note","")
+        if got == "":
+            got = self.last_note
+            if got == "" or got is None:
+                song_stuff = self.song_data.get(track_id)
+                got = song_stuff["key_note"]
+        else:
+            got -= 12
+            if got < 0:
+                got += 120
+                if got >= 128:
+                    got -= 12
+        got = abs(got) % 128
+        self.last_note = got
+        datum["note"] = got
+        datum["note_ui"] = getLyForMidiNote(got)
+        # self.spreader.refresh_line(line)
+        return True
+
+    def _do_up_on_scale(self, *, line):
+        datum = self.data[self.order[line]]
+        track_id = datum.get("track_id", -1)
+        song_stuff = self.song_data.get(track_id)
+        if song_stuff is None:
+            song_stuff = self.find_song_data(track_id)
+        got = datum.get("note","")
+        if got == "":
+            got = self.last_note
+        if got == "" or got is None:
+            got = song_stuff["key_note"]
+
+        key_note = song_stuff["key_note"]
+        adjusted_for_key = got
+        while adjusted_for_key < key_note:
+            adjusted_for_key += 12
+        while adjusted_for_key >= key_note + 12:
+            adjusted_for_key -= 12
+        offset_from_key = adjusted_for_key - key_note
+        trial = None
+        for scale_offset in song_stuff["scale_parsed"]:
+            if scale_offset > offset_from_key:
+                trial = scale_offset
+                break
+        if trial is None:
+            trial = song_stuff["scale_parsed"][0] + 12
+        trial = trial + key_note + got - adjusted_for_key
+        if trial < 0:
+            trial += 120
+        if trial >= 120:
+            trial -= 120
+        self.last_note = trial
+        datum["note"] = trial
+        datum["note_ui"] = getLyForMidiNote(trial)
+        # self.spreader.refresh_line(line)
+        return True
+
+    def _do_down_on_scale(self, *, line):
+        datum = self.data[self.order[line]]
+        track_id = datum.get("track_id", -1)
+        song_stuff = self.song_data.get(track_id)
+        if song_stuff is None:
+            song_stuff = self.find_song_data(track_id)
+        got = datum.get("note","")
+        if got == "":
+            got = self.last_note
+        if got == "" or got is None:
+            got = song_stuff["key_note"]
+
+        key_note = song_stuff["key_note"]
+        adjusted_for_key = got
+        while adjusted_for_key < key_note:
+            adjusted_for_key += 12
+        while adjusted_for_key >= key_note + 12:
+            adjusted_for_key -= 12
+        offset_from_key = adjusted_for_key - key_note
+        trial = None
+        for scale_offset in song_stuff["scale_parsed"][::-1]:
+            if scale_offset < offset_from_key:
+                trial = scale_offset
+                break
+        if trial is None:
+            trial = song_stuff["scale_parsed"][-1] - 12
+        trial = trial + key_note + got - adjusted_for_key
+        if trial < 0:
+            trial += 120
+        if trial >= 120:
+            trial -= 120
+        self.last_note = trial
+        datum["note"] = trial
+        datum["note_ui"] = getLyForMidiNote(trial)
+        # self.spreader.refresh_line(line)
+        return True
+
+    def _do_sample_note(self, *, line):
+        datum = self.data[self.order[line]]
+        self.csv_player.set_lead_note(datum["note"] )
+        self.spreader.show_status("Sampling note...")
+        self.ui.get_key(timeout=0.2)
+        self.csv_player.set_lead_note(None)
+        self.spreader.show_status("Done...")
+        return False
+
     def prepare_keys(self, spreader):
         self.spreader = spreader
         spreader.register_idle(self._do_idle)
@@ -410,6 +608,13 @@ class Importer:
             '"' / 'L' / 'l' : enter lyrics for row
                 - Start with '/' for new line.
                 - Start with '\\' for new row
+            "'" - Take lead note up an octave
+            "," - take lead note down an octave
+            "]" - shift note up one by scale
+            "[" - shift note down one by scale
+            "}" - shift note up by one half-tone
+            "{" - shift note down by one half-tone
+            ";" - sample the lead note
             'C' / 'c' : change the chord
             'D' / 'd' : delete row
             'E' / 'e' : export to MIDI
@@ -417,6 +622,7 @@ class Importer:
             'M' / 'm' : set a marker
                 - Start with '*' or '-' for a "point" marker (currently normal markers unimplemented)
             'P' / 'p' : play Audio + MIDI
+            'R' / 'r' : set note to REST
             'T' / 't' : mark as start of track
             'X' / 'x' : export as plain text
             'Y' / 'y' : export to Lilypond
@@ -441,10 +647,14 @@ class Importer:
                               description="Change the chord")
         spreader.register_key(self._do_play_chords, "h", "H",
                               description="Play just the chords")
-        spreader.register_key(self._do_shift_down, "j", "J", "^N",
+        spreader.register_key(self._do_shift_down, "j","^N",
                               description="Shift this note half way between the current spot and the one below it.")
-        spreader.register_key(self._do_shift_up, "k", "K", "^P",
+        spreader.register_key(self._do_shift_up, "k", "^P",
                               description="Shift this note half way between the current spot and the one above it.")
+        spreader.register_key(self._do_clone_down, "J",
+                              description="Clone this note half way between the current spot and the one below it.")
+        spreader.register_key(self._do_clone_up, "K",
+                              description="Clone this note half way between the current spot and the one above it.")
         spreader.register_key(self._do_export_midi, "E", "e", arg="?str",
                             prompt="Export to MIDI (^G to cancel; ENTER to name 'export.midi'.]",
                             description="Export to MIDI")
@@ -456,6 +666,22 @@ class Importer:
                             description="Export to text file")
         spreader.register_key(self._do_line_mark, "/",
                               description="change the line separator indicator in the lyrics")
+        spreader.register_key(self._do_up_octave, "'",
+                              description="Push the lead note up an octave")
+        spreader.register_key(self._do_down_octave, ",",
+                              description="Push the lead note down an octave")
+        spreader.register_key(self._do_up_note, "}",
+                              description="Push the lead note up an octave")
+        spreader.register_key(self._do_down_note, "{",
+                              description="Push the lead note down an octave")
+        spreader.register_key(self._do_up_on_scale, "]",
+                              description="Push the lead note up an octave")
+        spreader.register_key(self._do_down_on_scale, "[",
+                              description="Push the lead note down an octave")
+        spreader.register_key(self._do_sample_note, ";",
+                              description="Sample the current lead note")
+        spreader.register_key(self._do_lead_rest, "R", "r",
+                              description="Set lead note to rest")
 
     def scan(self):
         self.import_file = self.config["instance"]["import-file"]
@@ -481,7 +707,7 @@ class Importer:
         if location in self.data:
             raise IndexError("location {} already present in data".format(location))
         row = {"location":location, "mark":mark, "lyric":"", "track_ui":"", "chord_ui":"",
-               "chord-change":"", "track-change":"", "note":""}
+               "chord-change":"", "track-change":"", "note":"", "note_ui":"-"}
         self.data[location]  = row
         return row
 
@@ -496,6 +722,12 @@ class Importer:
             r.setdefault("chord-change", "")
             r.setdefault("track-change", "")
             r.setdefault("note", "")
+            note = r.get("note", "")
+            if note == "":
+                r["note_ui"] = "-"
+            else:
+                r["note_ui"] = getLyForMidiNote(note)
+
         self._propagate()
 
     def find_song_data(self, song):
@@ -517,6 +749,7 @@ class Importer:
         ret["pad_chords_parsed"] = parse_chords(ret.get("pad_chords", "1"), ret["scale_parsed"], ret["key_note"] + ret["pad_offset"])
         ret["pad_chord_seq"] = parse_sequence(ret.get("pad_sequence", "I"), ret["pad_chords_parsed"])
         ret["pad_velocity"] = int(ret.get("pad_velocity", 64))
+        ret["lead_velocity"] = int(ret.get("lead_velocity", 64))
         return ret
 
     def save(self):
@@ -531,10 +764,10 @@ class Importer:
 
     def get_line(self, what, max_len):
         datum = self.data[what]
-        padout=max_len - 18
+        padout=max_len - 23
         marklen = int(padout // 3)
         lyrlen = int(padout * 2 // 3)
-        return "{human_time} {lyric:{lyrlen}.{lyrlen}} {chord_ui: >3.3} {track_ui: >3.3} {mark:{marklen}.{marklen}}".format(
+        return "{human_time} {note_ui:5.5} {lyric:{lyrlen}.{lyrlen}} {chord_ui: >3.3} {track_ui: >3.3} {mark:{marklen}.{marklen}}".format(
             marklen=marklen, lyrlen=lyrlen,
             human_time=human_duration(datum["location"], floor=3), **datum)
 
