@@ -90,7 +90,10 @@ class CsvPlayer:
                                           program=self.track_info["lead_instrument"], time=0))
             self.player.feed_midi(Message('program_change', channel=PAD_CHANNEL,
                                           program=self.track_info["pad_instrument"], time=0))
-        message_time = datum["location"] - self.last_location
+        if self.last_location != 0:
+            message_time = datum["location"] - self.last_location
+        else:
+            message_time = 0
         self.last_location = datum["location"]
         if not self.exporting and self.realtime and message_time > 0:
             if not self.skip_nap:
@@ -98,7 +101,8 @@ class CsvPlayer:
             else:
                 self.skip_nap = False
         else:
-            self.message_time += int(message_time / 1000)
+            self.message_time += int(message_time * 1000)
+
         if not self.playing and not self.exporting:
             return
         self.__line += 1
@@ -107,15 +111,15 @@ class CsvPlayer:
         new_pad = datum.get("chord_value")
         if new_pad is not None:
             self.set_pad_note(new_pad)
-        new_lead = datum.get("lead_value")
+        new_lead = datum.get("note")
         if new_lead is not None:
             self.set_lead_note(new_lead)
         self.send_lyric(datum["lyric"], self.lead_note is not None)
 
     def silence(self):
+        self.playing = False
         self.set_lead_note()
         self.set_pad_note()
-        self.playing = False
 
     def _runner(self):
         while True:
@@ -130,7 +134,8 @@ class CsvPlayer:
 
 
     def set_lead_note(self, note=None):
-        global LEAD_CHANNEL
+        if isinstance(note, float):
+            note = int(note)
         if isinstance(self.lead_note, int):
             self.player.feed_midi(Message('note_off', note=self.lead_note, channel=LEAD_CHANNEL, time=self.message_time))
             self.message_time = 0
@@ -143,7 +148,7 @@ class CsvPlayer:
 
         if isinstance(note, int):
             self.player.feed_midi(
-                Message('note_on', note=note, channel=LEAD_CHANNEL, time=self.message_time, velocity=self.track_info["lead_velocity"]))
+                Message('note_on', note=note, channel=LEAD_CHANNEL, time=self.message_time, velocity=self.track_info.get("lead_velocity",64)))
             self.message_time = 0
         elif hasattr(note, "__iter__"):
             note_set = []
@@ -157,7 +162,8 @@ class CsvPlayer:
         self.lead_note = note
 
     def set_pad_note(self, note=None):
-        global PAD_CHANNEL
+        if isinstance(note, float):
+            note = int(note)
         if isinstance(self.pad_note, int):
             self.player.feed_midi(Message('note_off', note=self.pad_note, channel=PAD_CHANNEL, time=self.message_time))
             self.message_time = 0
@@ -170,7 +176,7 @@ class CsvPlayer:
 
         if isinstance(note, int):
             self.player.feed_midi(
-                Message('note_on', note=note, channel=PAD_CHANNEL, time=self.message_time, velocity=self.track_info["pad_velocity"]))
+                Message('note_on', note=note, channel=PAD_CHANNEL, time=self.message_time, velocity=self.track_info.get("pad_velocity",64)))
             self.message_time = 0
         elif hasattr(note, "__iter__"):
             note_set = []

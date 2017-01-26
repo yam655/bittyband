@@ -10,7 +10,7 @@ from mido import Message, MidiFile, MidiTrack
 
 from pathlib import Path
 
-from .midinames import getLyForMidiNote, getLyForMidiDrum
+from .midinames import getLyForMidiNote, getMidiInstrumentName
 from .commands import LEAD_CHANNEL, PAD_CHANNEL, DRUM_CHANNEL
 from .utils.cmdutils import *
 
@@ -21,28 +21,32 @@ _numbers_names = {"0": "Zero", "1":"One", "2":"Two", "3":"Three", "4":"Four",
 
 
 class LilypondFile:
-    title = None
-    key = None
-    _file_comments = []
-    header = []
-    chords = []
-    melody = []
-    lyrics = []
-    make_pdf = True
-    make_midi = True
-    clef = None
-    bpm = None
-    time_nu = None
-    time_de = None
-    poet = None
-    copyright = None
-    tagline = None
-    filename = None
+    def __init__(self):
+        self.title = None
+        self.key = None
+        self._file_comments = []
+        self.header = []
+        self.chords = []
+        self.melody = []
+        self.lyrics = []
+        self.make_pdf = True
+        self.make_midi = True
+        self.clef = None
+        self.bpm = None
+        self.time_nu = None
+        self.time_de = None
+        self.poet = None
+        self.copyright = None
+        self.tagline = None
+        self.filename = None
+
+    def is_empty(self):
+        return not self.melody and not self.chords and not self.lyrics
 
     def add_time(self, nu, de):
         if not self.melody:
-            self.time_nu = nu
-            self.time_de = de
+            self.time_nu = int(nu)
+            self.time_de = int(de)
         else:
             if self.time_de is None:
                 self.add_chunk("\\candenzaOff", channel=LEAD_CHANNEL)
@@ -52,8 +56,8 @@ class LilypondFile:
                 self.add_chunk("\\candenzaOn", channel=LEAD_CHANNEL)
                 self.time_nu = self.time_de = None
             else:
-                self.time_nu = nu
-                self.time_de = de
+                self.time_nu = int(nu)
+                self.time_de = int(de)
                 self.add_chunk("    \\time {}/{}".format(self.time_nu, self.time_de), channel=LEAD_CHANNEL)
 
     def add_chunk(self, chunk, channel=None):
@@ -146,6 +150,9 @@ class LilypondFile:
                     else:
                         result.append(" ".join(ch))
                         result.append("            % {} whole notes at 120 BPM".format(n[1]))
+                else:
+                    result.append("    {} % {} whole notes at 120 BPM".format(n[0], n[1]))
+
                 if len(n) > 2:
                     for c in n[2:]:
                         result.append("            {}".format(c))
@@ -155,9 +162,9 @@ class LilypondFile:
 
         if self.lyrics:
             if isinstance(self.lyrics[0], str):
-                result.append("words = {")
+                result.append("words = \\lyricmode {")
                 result.append('%    \\set stanza = #"1. "')
-                for lne in self.lyrics:
+                for lne in " ".join(self.lyrics).split("\n"):
                     result.append('    {}'.format(lne))
                 result.append("}")
                 result.append("")
@@ -165,8 +172,8 @@ class LilypondFile:
                 for idx in range(len(self.lyrics)):
                     sufx = number_suffix(idx + 1, len(self.lyrics))
                     result.append("".join(["words", sufx, " = {"]))
-                    result.append('    \\set stanza = #"{}. "'.format(idx+1))
-                    for lne in self.lyrics[idx]:
+                    result.append('%    \\set stanza = #"{}. "'.format(idx+1))
+                    for lne in " ".join(self.lyrics[idx]).split("\n"):
                         result.append('    {}'.format(lne))
                     result.append("}")
                     result.append("")
@@ -230,6 +237,8 @@ class ExportLy:
         else:
             i = 0
             for lily in self.lilies:
+                if lily.is_empty():
+                    continue
                 i += 1
                 if lily.filename is None:
                     filename = self.filenm.with_name("{}-{}{}".format(self.filenm.stem, i, self.filenm.suffix))
@@ -246,8 +255,8 @@ class ExportLy:
         t = parse_timing(time)
         if t is not None:
             t = t.split("/")
-            self.lily.time_nu = t[0]
-            self.lily.time_de = t[1]
+            self.lily.time_nu = int(t[0])
+            self.lily.time_de = int(t[1])
         self.lily.title = title
         self.lily.poet = poet
         self.lily.key = lily_key
@@ -292,6 +301,13 @@ class ExportLy:
             self.feed_comment(cmd, channel=channel)
             return
 
+    def _feed_instrument(self, cmd, *, channel):
+        lilyinstr = getMidiInstrumentName(cmd.program)
+        if lilyinstr is None or lilyinstr == "":
+            self.feed_comment("Unknown MIDI Instrument numbered {}".format(cmd.program), channel=channel)
+        else:
+            self.lily.add_chunk('\\set midiInstrument = #"{}"'.format(lilyinstr.lower()), channel=channel)
+
     def _feed_note(self, what_type, chunk, channel=None):
         if what_type == "note_on":
             if channel == LEAD_CHANNEL:
@@ -326,9 +342,17 @@ class ExportLy:
 
 
     def feed_lyric(self, lyric):
+        if lyric is None or lyric == "":
+            return
+        if lyric.startswith("/"):
+            self.lily.lyrics.append("\n")
+            lyric = lyric[1:]
+        elif lyric.startswith("\\"):
+            self.lily.lyrics.append("\n\n")
+            lyric = lyric[1:]
         self.lily.lyrics.append(quote_as_needed(lyric))
 
-    def feed_midi(self, *what, ui=None, abbr=None, channel=None, time=None):
+    def feed_midi(self, *what, abbr=None, channel=None, time=None):
         if len(what) == 0:
             return
         if abbr == "panic":
@@ -360,6 +384,8 @@ class ExportLy:
             self._feed_note(what_type, chunk, channel=channel)
         elif what_type == "note_off":
             self._feed_note(what_type, chunk, channel=channel)
+        elif what_type == "program_change":
+            self._feed_instrument(what[0], channel=channel)
         else:
             self.feed_comment("{!r}".format(what), channel=channel)
 
