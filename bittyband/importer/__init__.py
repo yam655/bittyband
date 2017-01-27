@@ -338,13 +338,36 @@ class Importer:
     def _do_clone(self, line, dir = 1):
         base = self.order[line]
         if line + 1 == len(self.order):
-            return
+            return False
         next = self.order[line+dir]
         offset = (next - base) / 2
         if offset < 0.0005 and offset > -0.0005:
-            return
+            return False
         loc = base + offset
         self._perform_jump(loc, callback=self.clone_goodies, callback_args={"from_loc":base})
+
+    def _do_nudge(self, offset, *, line):
+        if line is None or line == "":
+            return False
+        try:
+            offset = float(offset)
+        except ValueError:
+            self.spreader.show_status("Invalid offset: {}".format(offset))
+        base = self.order[line]
+        location = base + offset
+        if line > 0 and self.order[line-1] > location:
+            self.spreader.show_status("Invalid offset: {}; can't go over {}".format(offset, self.order[line - 1]))
+            return False
+        if line < len(self.order) - 1 and self.order[line+1] < location:
+            self.spreader.show_status("Invalid offset: {}; can't go under {}".format(offset, self.order[line + 1]))
+            return False
+
+        self._perform_jump(location, callback=self.swap_goodies, callback_args={"from_loc": self.order[line]})
+        line_now = line
+        if offset < 0:
+            line_now += 1
+        self._do_delete(line=line_now)
+        self.spreader.move_to(line)
 
     def clone_goodies(self, to_loc, from_loc):
         data_from = self.data[from_loc]
@@ -601,8 +624,8 @@ class Importer:
         spreader.on_exit(self.save)
         """ Key commands:
             ^J : Go to line and repeat
-            ^N / 'j' / 'J' : shift down by half
-            ^P / 'k' / 'K' : shift up by half
+            ^N : shift down by half
+            ^P : shift up by half
             '@' : jump to or create by timecode
             '.' : mark current audio location as a beat
             '"' / 'L' / 'l' : enter lyrics for row
@@ -618,9 +641,14 @@ class Importer:
             'C' / 'c' : change the chord
             'D' / 'd' : delete row
             'E' / 'e' : export to MIDI
-            'H' / 'h' : play just the chords
+            'H' / 'h' : play just the MIDI
+            'j' : shift down by half
+            'k' : shift up by half
+            'J' : clone down by half
+            'K' : clone up by half
             'M' / 'm' : set a marker
                 - Start with '*' or '-' for a "point" marker (currently normal markers unimplemented)
+            'N' / 'n' : nudge explicitly
             'P' / 'p' : play Audio + MIDI
             'R' / 'r' : set note to REST
             'T' / 't' : mark as start of track
@@ -682,6 +710,8 @@ class Importer:
                               description="Sample the current lead note")
         spreader.register_key(self._do_lead_rest, "R", "r",
                               description="Set lead note to rest")
+        spreader.register_key(self._do_nudge, "N", "n", arg="?str", prompt="Nudge the current line up or down in seconds:",
+                              description="Nudge this note explicitly between the current spot and the two around it it.")
 
     def scan(self):
         self.import_file = self.config["instance"]["import-file"]

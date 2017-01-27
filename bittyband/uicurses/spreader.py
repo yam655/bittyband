@@ -17,8 +17,9 @@ class Spreader(GenericLister):
 
     def get_key(self):
         key = None
+        self.stdscr.refresh()
         while key is None:
-            key = self.ui.get_key(timeout=0.5)
+            key = self.ui.get_key(timeout=0.05)
             if key is None:
                 if self.idle_cmd is not None:
                     self.idle_cmd()
