@@ -70,6 +70,7 @@ class Importer:
         self.start_segment = self.order[line]
         self.start_line = line
         self.end_segment = None
+        self.playing_row = None
         if self.player.playing:
             self.csv_player.pause()
             self.csv_player.silence()
@@ -85,6 +86,7 @@ class Importer:
         self.start_segment = self.order[line]
         self.start_line = line
         self.end_segment = None
+        self.playing_row = None
         if self.csv_player.playing:
             self.csv_player.pause()
             self.player.pause()
@@ -116,6 +118,7 @@ class Importer:
         if datum.get("mark_idx", -1) < 0:
             self.spreader.show_status("This line isn't in a marked section")
             return False
+        self.playing_row = None
         self.start_line = datum["mark_idx"]
         end_line = self.start_line
         while end_line < len(self.order) and self.data.get(self.order[end_line]).get("mark_idx",-1) == self.start_line:
@@ -161,7 +164,8 @@ class Importer:
         # self.spreader.display_time(display)
         # display = human_duration(self.order[self.csv_player.line-1], floor=1)
         # self.spreader.display_line(display)
-        if self.playing_row is not None and self.playing_row != self.spreader.active:
+        row = self.playing_row
+        if row is not None and row != self.spreader.active:
             self._do_play_segment(line=self.spreader.active, advertise=False)
         if not self.player.playing:
             if len(self.order) != len(self.data):
