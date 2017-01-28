@@ -30,6 +30,7 @@ class Importer:
         self.end_segment = None
         self.song_data = {}
         self.last_note = None
+        self.playing_row = None
         self.project_dir = Path(config["instance"]["project_dir"])
 
     def wire(self, *, ui, import_lister, csv_player, push_player, **kwargs):
@@ -86,22 +87,25 @@ class Importer:
         self.end_segment = None
         if self.csv_player.playing:
             self.csv_player.pause()
+            self.player.pause()
             self.csv_player.silence()
         else:
             self.csv_player.silence()
+            self.player.pause()
             self.csv_player.seek(self.start_line)
             self.csv_player.play()
 
-    def _do_play_segment(self, *, line):
+    def _do_play_segment(self, *, line, advertise=True):
         if line == len(self.order) - 1:
             self.spreader.show_status("Can not play last segment")
+            self.playing_row = None
             return False
         self.start_segment = self.order[line]
         self.start_line = line
+        self.playing_row = line
         self.end_segment = self.order[line + 1]
-        self.spreader.show_status("Playing: {} to {}".format(human_duration(self.start_segment), human_duration(self.end_segment)))
-        self.player.seek(self.start_segment)
-        self.player.play()
+        if advertise:
+            self.spreader.show_status("Playing current line".format(human_duration(self.start_segment), human_duration(self.end_segment)))
         self.player.seek(self.start_segment)
         self.player.play()
         self.csv_player.seek(self.start_line)
@@ -157,6 +161,8 @@ class Importer:
         # self.spreader.display_time(display)
         # display = human_duration(self.order[self.csv_player.line-1], floor=1)
         # self.spreader.display_line(display)
+        if self.playing_row is not None and self.playing_row != self.spreader.active:
+            self._do_play_segment(line=self.spreader.active, advertise=False)
         if not self.player.playing:
             if len(self.order) != len(self.data):
                 self.update_order()
