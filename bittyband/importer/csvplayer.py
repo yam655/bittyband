@@ -45,7 +45,7 @@ class CsvPlayer:
 
     def seek(self, line):
         self.__line = line
-        self.skip_nap = True
+        self.last_location = 0
         self.playing = False
 
     line = property(lambda self: self.__line)
@@ -96,10 +96,7 @@ class CsvPlayer:
             message_time = 0
         self.last_location = datum["location"]
         if not self.exporting and self.realtime and message_time > 0:
-            if not self.skip_nap:
-                time.sleep(message_time)
-            else:
-                self.skip_nap = False
+            time.sleep(message_time)
         else:
             self.message_time += int(message_time * 1000)
 

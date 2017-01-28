@@ -245,12 +245,15 @@ def find_project_dir(project):
     return project_dir
 
 
-def load_project_config(args=None):
+def load_project_config(args):
     global config
 
     load_home_config(args)
     if "instance" not in config:
         config.add_section("instance")
+    if args.project is None or args.project == "":
+        if "projects" in config and "__default__" in config["projects"]:
+            args.project = config["projects"]["__default__"]
     project_dir = find_project_dir(args.project)
     conf_path = project_dir / "bittyband.conf"
     if not conf_path.exists():
