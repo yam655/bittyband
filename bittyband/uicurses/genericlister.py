@@ -22,6 +22,7 @@ class FieldReader:
         self.x2 = x2
         self.cursor = x1
         self.next_of_kind = False
+        self.apply_change = False
 
     def move(self, x = None):
         if x is not None:
@@ -70,6 +71,9 @@ class FieldReader:
             return False
         elif key == "^I":
             self.next_of_kind = True
+            return False
+        elif key == "^R":
+            self.apply_change = True
             return False
         elif key == "^K":
             self.data = self.data[:self.cursor - self.x1]
@@ -139,6 +143,7 @@ class GenericLister:
         self.ui = None
         self.invalidate = False
         self.next_of_kind = False
+        self.apply_change = False
 
     def wire(self, *, logic, ui, **kwargs):
         self.ui = ui
@@ -212,6 +217,7 @@ class GenericLister:
         fr = FieldReader(self, self.stdscr, max_y - 1, 0, max_x)
         s = fr.get(initial)
         self.next_of_kind = fr.next_of_kind
+        self.apply_change = fr.apply_change
         self.stdscr.hline(max_y - 2, 0, "=", max_x)
         self.stdscr.addstr(" ")
         self.stdscr.move(max_y - 1, 0)
@@ -284,7 +290,7 @@ class GenericLister:
                 elif entry.arg == "?str":
                     initial = ""
                     self.next_of_kind = True
-                    while self.next_of_kind:
+                    while self.next_of_kind or self.apply_change:
                         if entry.query:
                             initial = entry.function(None, line=-self.active)
                         s = self.read_string(entry.prompt, initial=initial)

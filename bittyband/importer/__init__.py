@@ -232,7 +232,10 @@ class Importer:
         last_chord = "rest"
         self._tracks = []
         chord_idx = -1
-        this_track = self.find_song_data(-1)
+        if str(0.0) in self.metadata:
+            this_track = self.find_song_data(0.0)
+        else:
+            this_track = self.find_song_data(-1)
         self.song_data[-1] = this_track
         chord_values = this_track["pad_chord_seq"]
         last_mark = -1
@@ -314,6 +317,8 @@ class Importer:
             self.metadata[str(t)]["title"] = self.data[t]["mark"]
 
     def _do_jump(self, timecode, *, line):
+        if timecode is None or timecode.strip() == "":
+            return False
         location = from_human_duration(timecode)
         if location is None:
             self.spreader.show_status("Invalid timecode: {}".format(timecode))
@@ -393,10 +398,14 @@ class Importer:
     def _do_nudge(self, offset, *, line):
         if line is None or line == "":
             return False
+        if line == 0 or line == len(self.order) -1:
+            self.spreader.show_status("Can't nudge top or bottom.")
+            return False
         try:
             offset = float(offset)
         except ValueError:
             self.spreader.show_status("Invalid offset: {}".format(offset))
+            return False
         base = self.order[line]
         location = base + offset
         if line > 0 and self.order[line-1] > location:
@@ -411,6 +420,8 @@ class Importer:
         if offset < 0:
             line_now += 1
         self._do_delete(line=line_now)
+        self.spreader.move_to(line+1)
+        self._do_idle()
         self.spreader.move_to(line)
 
     def clone_goodies(self, to_loc, from_loc):
@@ -817,9 +828,8 @@ class Importer:
         else:
             song_meta = {}
         for k in song_meta.keys():
-            if k not in ret or song_meta[k].strip() != "":
+            if song_meta[k].strip() != "":
                 ret[k] = song_meta[k]
-
         ret["key_note"] = int(ret.get("key","60"))
         ret["scale_parsed"] = parse_scale(ret.get("scale", "1 2 3 4 5 6 7").strip())
         ret["lead_instrument"] = int(ret.get("lead_instrument","0"))
@@ -872,5 +882,5 @@ class Importer:
         out["pad_instrument"] = str(basis.get("pad_instrument","0"))
         out["pad_offset"] = str(basis.get("pad_offset","-12"))
         out["pad_chords"] = basis.get("pad_chords", "1")
-        out["pad_chord_seq"] = basis.get("pad_sequence", "I")
+        out["pad_sequence"] = basis.get("pad_sequence", "I")
         out["pad_velocity"] = str(basis.get("pad_velocity", 64))
