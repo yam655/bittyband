@@ -64,8 +64,7 @@ class FieldReader:
                 self.move(self.cursor + 1)
                 self.refresh()
         elif key in "^G":
-            self.data = []
-            return False
+            raise GetStrInterrupt()
         elif key in ("^J", "KEY_ENTER"):
             return False
         elif key == "^K":
@@ -109,15 +108,22 @@ class FieldReader:
         self.data = list(initial)
         self.cursor = self.x1 + len(initial)
         self.refresh()
-        while 1:
-            key = self.getcher.get_key()
-            if not self.do_command(key):
-                break
+        ret = initial
+        try:
+            while 1:
+                key = self.getcher.get_key()
+                if not self.do_command(key):
+                    ret = "".join(self.data)
+                    break
+        except GetStrInterrupt:
+            ret = initial
         self.stdscr.move(self.y, self.x1)
         self.stdscr.clrtoeol()
         self.stdscr.refresh()
-        return "".join(self.data)
+        return ret
 
+class GetStrInterrupt(Exception):
+    pass
 
 class GenericLister:
     def __init__(self, config):

@@ -101,11 +101,37 @@ class Importer:
         self.end_segment = self.order[line + 1]
         self.spreader.show_status("Playing: {} to {}".format(human_duration(self.start_segment), human_duration(self.end_segment)))
         self.player.seek(self.start_segment)
+        self.player.play()
+        self.player.seek(self.start_segment)
+        self.player.play()
         self.csv_player.seek(self.start_line)
-        if not self.player.playing:
-            self.player.play()
-        if not self.csv_player.playing:
-            self.csv_player.play()
+        self.csv_player.play()
+
+    def _do_repeat_mark(self, *, line):
+        datum = self.data.get(self.order[line])
+        if datum.get("mark_idx", -1) < 0:
+            self.spreader.show_status("This line isn't in a marked section")
+            return False
+        self.start_line = datum["mark_idx"]
+        end_line = self.start_line
+        while end_line < len(self.order) and self.data.get(self.order[end_line]).get("mark_idx",-1) == self.start_line:
+            end_line += 1
+        if end_line >= len(self.order):
+            end_line = len(self.order) - 1
+
+        start_secs = self.order[line]
+        self.start_segment = start_secs
+        self.end_segment = self.order[end_line]
+        starting_at = ""
+        if line != self.start_line:
+            starting_at = " starting at {}".format(human_duration(start_secs))
+        self.spreader.show_status("Playing: {} to {}{}".format(human_duration(self.start_segment), human_duration(self.end_segment), starting_at))
+        self.player.seek(self.start_segment)
+        self.player.play()
+        self.player.seek(self.start_segment)
+        self.player.play()
+        self.csv_player.seek(self.start_line)
+        self.csv_player.play()
 
     def _do_delete(self, *, line):
         if line == 0 or line == len(self.order) - 1:
@@ -199,10 +225,18 @@ class Importer:
         this_track = self.find_song_data(-1)
         self.song_data[-1] = this_track
         chord_values = this_track["pad_chord_seq"]
+        last_mark = -1
+        idx = -1
         for location in self.order:
+            idx += 1
             datum = self.data.get(location)
             next_track = datum.get("track-change", "")
             next_chord = datum.get("chord-change", "")
+            mark = datum.get("mark","")
+            if mark != "":
+                if mark[0] not in ".-*@+=: ":
+                    last_mark = idx
+            datum["mark_idx"] = last_mark
             if next_track == "":
                 if last_track == "unknown":
                     datum["track_ui"] = "  ?"
@@ -637,7 +671,9 @@ class Importer:
             "[" - shift note down one by scale
             "}" - shift note up by one half-tone
             "{" - shift note down by one half-tone
+            "/" : change the line separator indicator in the lyrics
             ";" - sample the lead note
+            ":" : repeat the marked section
             'C' / 'c' : change the chord
             'D' / 'd' : delete row
             'E' / 'e' : export to MIDI
@@ -654,6 +690,7 @@ class Importer:
             'T' / 't' : mark as start of track
             'X' / 'x' : export as plain text
             'Y' / 'y' : export to Lilypond
+
         """
         spreader.register_key(self._do_play, "P", "p", arg="...slow", prompt="Playing...",
                             description="Play this file.")
@@ -712,6 +749,8 @@ class Importer:
                               description="Set lead note to rest")
         spreader.register_key(self._do_nudge, "N", "n", arg="?str", prompt="Nudge the current line up or down in seconds:",
                               description="Nudge this note explicitly between the current spot and the two around it it.")
+        spreader.register_key(self._do_repeat_mark, ":",
+                              description="Repeat the marked section")
 
     def scan(self):
         self.import_file = self.config["instance"]["import-file"]
