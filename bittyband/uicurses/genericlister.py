@@ -21,6 +21,7 @@ class FieldReader:
         self.data = []
         self.x2 = x2
         self.cursor = x1
+        self.next_of_kind = False
 
     def move(self, x = None):
         if x is not None:
@@ -66,6 +67,9 @@ class FieldReader:
         elif key in "^G":
             raise GetStrInterrupt()
         elif key in ("^J", "KEY_ENTER"):
+            return False
+        elif key == "^I":
+            self.next_of_kind = True
             return False
         elif key == "^K":
             self.data = self.data[:self.cursor - self.x1]
@@ -134,6 +138,7 @@ class GenericLister:
         self.running = False
         self.ui = None
         self.invalidate = False
+        self.next_of_kind = False
 
     def wire(self, *, logic, ui, **kwargs):
         self.ui = ui
@@ -204,7 +209,9 @@ class GenericLister:
         self.stdscr.move(max_y - 1, 0)
         self.stdscr.clrtoeol()
         self.stdscr.refresh()
-        s = FieldReader(self, self.stdscr, max_y - 1, 0, max_x).get(initial)
+        fr = FieldReader(self, self.stdscr, max_y - 1, 0, max_x)
+        s = fr.get(initial)
+        self.next_of_kind = fr.next_of_kind
         self.stdscr.hline(max_y - 2, 0, "=", max_x)
         self.stdscr.addstr(" ")
         self.stdscr.move(max_y - 1, 0)
@@ -276,12 +283,16 @@ class GenericLister:
                         self.refresh_line(self.active)
                 elif entry.arg == "?str":
                     initial = ""
-                    if entry.query:
-                        initial = entry.function(None, line=-self.active)
-                    s = self.read_string(entry.prompt, initial=initial)
-                    if s is not None:
-                        if entry.function(s, line=self.active):
-                            self.refresh_line(self.active)
+                    self.next_of_kind = True
+                    while self.next_of_kind:
+                        if entry.query:
+                            initial = entry.function(None, line=-self.active)
+                        s = self.read_string(entry.prompt, initial=initial)
+                        if s is not None:
+                            if entry.function(s, line=self.active):
+                                self.refresh_line(self.active)
+                        if self.next_of_kind:
+                            self.move_to(self.active + 1)
                 elif entry.arg == "...slow":
                     self.show_status(entry.prompt)
                     if entry.function(line=self.active):
