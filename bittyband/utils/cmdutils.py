@@ -117,8 +117,15 @@ def parse_sequence(pad_sequence, chord_map):
     seq = pad_sequence.split("-")
     # pad_sequence = I-vi-IV-V
     for s in seq:
+        octave = 0
+        while s.endswith("'"):
+            octave += 12
+            s = s[:-1]
+        while s.endswith(","):
+            octave -= 12
+            s = s[:-1]
         if s in chord_map:
-            ret.append(chord_map[s])
+            ret.append([x + octave for x in chord_map[s]])
         else:
             raise ConfigError("Unrecognized chord: {}".format(s))
     return ret
@@ -138,9 +145,17 @@ def add_for_scale(box, suffix, notes, scale, key_note):
         for o in notes.split():
             if o == "":
                 continue
+            octave = 0
+            while o.endswith("'"):
+                octave += 12
+                o = o[:-1]
+            while o.endswith(","):
+                octave -= 12
+                o = o[:-1]
             ival = _interval_conversion.get(o)
             if ival is None:
                 raise ConfigError("Unknown interval: " + o)
+            ival += octave
             chord.append(note + ival)
         box[str(n + 1) + suffix] = chord
         box[_roman[n] + suffix] = chord
@@ -176,9 +191,17 @@ def add_override(box, stompers, notes, scale, key_note):
         for o in notes.split():
             if o == "":
                 continue
+            octave = 0
+            while o.endswith("'"):
+                octave += 12
+                o = o[:-1]
+            while o.endswith(","):
+                octave -= 12
+                o = o[:-1]
             ival = _interval_conversion.get(o)
             if ival is None:
                 raise ConfigError("Unknown interval: " + o)
+            ival += octave
             chord.append(note + ival)
         box[stomp] = chord
 

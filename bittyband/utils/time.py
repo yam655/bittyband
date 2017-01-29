@@ -5,7 +5,7 @@ __all__ = ["human_duration", "reasonable_time", "from_human_duration"]
 import time
 
 def from_human_duration(code):
-    if code is None or isinstance(code, int) or isinstance(code,float):
+    if code is None or isinstance(code, int) or isinstance(code,float) or code == "":
         return code
     splits = code.split(":")
     ret = 0
