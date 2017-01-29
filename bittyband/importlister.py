@@ -9,6 +9,7 @@ import taglib
 import pyglet
 import time
 
+from .importer import Importer
 from .utils.time import human_duration, reasonable_time
 
 class ImportLister:
@@ -72,11 +73,72 @@ class ImportLister:
         self.config["instance"]["import-file"] = self.order[line]
         self.ui.switch_import_file()
 
+    def _do_export_midi(self, filename, line):
+        if filename is None or len(filename.strip()) == 0:
+            self.export_midi(self.get_order()[line],
+                             self.project_dir / "{}.midi".format(self.get_order()[line]))
+        else:
+            self.export_midi(self.get_order()[line], self.project_dir / filename)
+        return False
+
+    def _do_export_lily(self, filename, line):
+        if filename is None or len(filename.strip()) == 0:
+            self.export_ly(self.get_order()[line],
+                           self.project_dir / "{}.ly".format(self.get_order()[line]))
+        else:
+            self.export_ly(self.get_order()[line], self.project_dir / filename)
+        return False
+
+    def _do_export_txt(self, filename, *, line):
+        if filename is None or len(filename.strip()) == 0:
+            self.export_txt(self.get_order()[line], self.project_dir / "{}.txt".format(self.get_order()[line]))
+        else:
+            self.export_txt(self.get_order()[line], self.project_dir / filename)
+        return False
+
+
+    def export_midi(self, basename, output):
+        config = {}
+        config.update(self.config)
+        config["instance"]["import-file"] = basename
+        importer = Importer(self.config)
+        importer.wire(ui = self.ui, import_lister=self, push_player=None, csv_player=None)
+        importer.scan()
+        importer.export_midi(output)
+
+    def export_txt(self, basename, output):
+        config = {}
+        config.update(self.config)
+        config["instance"]["import-file"] = basename
+        importer = Importer(self.config)
+        importer.wire(ui = None, import_lister=self, push_player=None, csv_player=None)
+        importer.scan()
+        importer.export_txt(output)
+
+    def export_ly(self, basename, output):
+        config = {}
+        config.update(self.config)
+        config["instance"]["import-file"] = basename
+        importer = Importer(self.config)
+        importer.wire(ui = None, import_lister=self, push_player=None, csv_player=None)
+        importer.scan()
+        importer.export_ly(output)
+
+
     def prepare_keys(self, lister):
         lister.register_key(self._do_play, "P", "p", arg="...slow", prompt="Playing...",
                             description="Play this file.")
         lister.register_key(self._do_importer, "I", "i", "^J",
                             description="Import this file")
+        lister.register_key(self._do_export_midi, "E", "e", "M", "m", arg="?str",
+                            prompt="Export to MIDI (^G to cancel; ENTER to name '$BASENAME.midi'.]",
+                            description="Export to MIDI")
+        lister.register_key(self._do_export_lily, "Y", "y", "L", "l", arg="?str",
+                            prompt="Export to Lilypond (^G to cancel; ENTER to name '$BASENAME.ly'.]",
+                            description="Export to Lilypond file")
+        lister.register_key(self._do_export_txt, "X", "x", "T", "t", arg="?str",
+                            prompt="Export to plain text  (^G to cancel; ENTER to name '$BASENAME.txt'.]",
+                            description="Export to text file")
 
     def get_order(self):
         return self.order
@@ -108,11 +170,11 @@ class ImportLister:
         return self.data.get(what)
 
     def scan(self):
-        self.order = []
         import_dir = self.project_dir / "imports"
         if not import_dir.exists():
             return
         self.data = {}
+        sortable_order = []
         for f in import_dir.glob("*.[mM][pP]3"):
             metadata_file = f.with_suffix(".meta")
             lyrics_file = f.with_suffix(".txt")
@@ -157,6 +219,7 @@ class ImportLister:
                 with open(str(metadata_file), 'w') as out:
                     meta.write(out)
 
+            sortable_order.append((int(metadata_file.stat().st_mtime), float(meta["audio"]["modified"]), metadata_file.stem))
             title = meta["audio"]["title"]
             length_secs = float(meta["audio"]["length"])
             total_length = human_duration(length_secs)
@@ -166,7 +229,6 @@ class ImportLister:
             if "unprocessed_length" in meta["audio"]:
                 unprocessed_length = human_duration(float(meta["audio"]["unprocessed_length"]))
 
-            self.order.append(metadata_file.stem)
             self.data[metadata_file.stem] = {
                 "media": str(media_file.resolve()),
                 "metadata": str(metadata_file.resolve()),
@@ -177,6 +239,8 @@ class ImportLister:
                 "tracks": tracks,
                 "unprocessed_length": unprocessed_length,
             }
+        sortable_order.sort(reverse=True)
+        self.order = [x[-1] for x in sortable_order]
 
         return self.order
 

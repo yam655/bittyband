@@ -19,8 +19,6 @@ config = ConfigParser(inline_comment_prefixes=None)
 def parse(argv):
     global config
     global parser
-    if len(argv) == 0:
-        argv = ["gui"]
     args = parser.parse_args(argv)
     if hasattr(args, "func"):
         if args.func(args):
@@ -31,7 +29,8 @@ def parse(argv):
         if args.mode == "importer":
             config["instance"]["import-file"] = args.import_file
     else:
-        config["instance"]["mode"] = "gui"
+        parser.parse_args(["-h"])
+        sys.exit(0)
     return config
 
 
@@ -299,7 +298,6 @@ parser.add_argument("-p", "--project", metavar="PROJ",
                     help="Specify a project or project location other than the current directory.")
 parser.add_argument("--midiport", metavar="PORT",
                     help="Specify an explicit MIDI port to use. (Default: first available.)")
-# parser.add_argument("-u", "--user", help="ignore project-specific config file")
 subparsers = parser.add_subparsers(title="Actions", help="Action to take")
 parser_create = subparsers.add_parser("create", description="Create a new project")
 parser_create.add_argument("project", help="Name of project directory to create.")

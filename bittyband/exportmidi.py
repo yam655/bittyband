@@ -11,15 +11,10 @@ from datetime import datetime, timedelta
 from mido import Message, MidiFile, MidiTrack
 
 class ExportMidi:
-    track = None
-    filenm = None
-
     def __init__(self, config, filenm):
+        self.track = None
         self.filenm = filenm
-        self.reconfigure(config)
-
-    def reconfigure(self, config):
-        pass
+        self.midifile = None
 
     def new_track(self, **kwargs):
         pass
