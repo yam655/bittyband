@@ -19,14 +19,21 @@ class ExportTxt:
             self.lines.extend(self.trail)
         with self.filename.open("wt") as out:
             out.write("\n".join(self.lines))
+            out.write("\n")
 
     def new_track(self, *, copyright = None, tagline = None, poet=None,
                   title, filename = None, **kwargs):
+        if len(self.cur) > 0:
+            self.lines.append("".join(self.cur))
+            self.cur = []
+
         if len(self.trail) > 0:
             self.lines.extend(self.trail)
         self.trail = []
 
         if len(self.lines) > 0:
+            if self.lines and self.lines[-1] != "":
+                self.lines.append("")
             self.lines.append("")
             if title is None:
                 self.lines.append("----")
@@ -49,13 +56,24 @@ class ExportTxt:
             self.trail.insert(0, "")
 
     def unknown_track(self):
-        if len(self.lines) > 0:
-            self.lines.append("")
+        if len(self.cur) > 0:
+            self.lines.append("".join(self.cur))
+            self.cur = []
 
         title = "Unknown Track"
-        self.lines.append(title)
-        self.lines.append("=" * len(title))
-        self.lines.append("")
+
+        if len(self.lines) > 0:
+            if self.lines and self.lines[-1] != "":
+                self.lines.append("")
+            self.lines.append("")
+            if title is None:
+                self.lines.append("----")
+                self.lines.append("")
+
+        if title is not None:
+            self.lines.append(title)
+            self.lines.append("=" * len(title))
+            self.lines.append("")
 
     def player(self):
         pass
@@ -77,12 +95,15 @@ class ExportTxt:
             return
         lyric = str(lyric)
         if lyric.startswith("/"):
-            self.lines.append("".join(self.cur))
+            if self.cur:
+                self.lines.append("".join(self.cur))
             self.cur = []
             lyric = lyric[1:]
         elif lyric.startswith("\\"):
-            self.lines.append("".join(self.cur))
-            self.lines.append("")
+            if self.cur:
+                self.lines.append("".join(self.cur))
+            if self.lines and self.lines[-1] != "":
+                self.lines.append("")
             self.cur = []
             lyric = lyric[1:]
         needSpace = False

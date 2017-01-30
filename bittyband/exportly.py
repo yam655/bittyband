@@ -350,7 +350,14 @@ class ExportLy:
         elif lyric.startswith("\\"):
             self.lily.lyrics.append("\n\n")
             lyric = lyric[1:]
-        self.lily.lyrics.append(quote_as_needed(lyric))
+        if lyric.endswith(" --"):
+            self.lily.lyrics.append(quote_as_needed(lyric[:-3]))
+            self.lily.lyrics.append("--")
+        elif lyric.endswith(" __"):
+            self.lily.lyrics.append(quote_as_needed(lyric[:-3]))
+            self.lily.lyrics.append("__")
+        else:
+            self.lily.lyrics.append(quote_as_needed(lyric))
 
     def feed_midi(self, *what, abbr=None, channel=None, time=None):
         if len(what) == 0:

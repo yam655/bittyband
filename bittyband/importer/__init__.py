@@ -32,6 +32,7 @@ class Importer:
         self.last_note = None
         self.playing_row = None
         self.project_dir = Path(config["instance"]["project_dir"])
+        self.changed = False
 
     def wire(self, *, ui, import_lister, csv_player, push_player, **kwargs):
         self.ui = ui
@@ -148,6 +149,7 @@ class Importer:
         del self.data[item]
         del self.order[line]
         self.spreader.invalidate = True
+        self.changed = True
         return True
 
     def _do_idle(self):
@@ -181,6 +183,7 @@ class Importer:
         if offset not in self.data:
             self.add_row(offset)
         self.spreader.show_status(human_duration(offset, 3))
+        self.changed = True
         return False
 
     _track_change_states = ["", "crap", "resume", "unknown", "track"]
@@ -204,6 +207,7 @@ class Importer:
         datum["track-change"] = self._track_change_states[idx]
         self._need_propagate = True
         self.spreader.refresh_line(line)
+        self.changed = True
         return True
 
     _chord_options = ["", "chord", "rest", "resume"]
@@ -224,6 +228,7 @@ class Importer:
         datum["chord-change"] = self._chord_options[idx]
         self._need_propagate = True
         self.spreader.refresh_line(line)
+        self.changed = True
         return True
 
     def _propagate(self):
@@ -334,6 +339,7 @@ class Importer:
                 self.update_order()
                 newline = self.order.index(location)
         if newline is None:
+            self.changed = True
             was_p_playing = self.player.playing
             was_c_playing = self.csv_player.playing
             self.add_row(location)
@@ -357,9 +363,11 @@ class Importer:
         if line < 0 or lyric is None:
             return self.data[self.order[-line]].get("lyric","")
         self.data[self.order[line]]["lyric"] = lyric.strip()
+        self.changed = True
         return True
 
     def _do_line_mark(self, *, line):
+        self.changed = True
         lyric = self.data[self.order[line]].get("lyric", "")
         if lyric == "":
             self.data[self.order[line]]["lyric"] = "/"
@@ -376,6 +384,7 @@ class Importer:
         if line < 0 or mark is None:
             return self.data[self.order[-line]].get("mark","")
         self.data[self.order[line]]["mark"] = mark
+        self.changed = True
         return True
 
     def _do_clone_up(self, *, line):
@@ -425,6 +434,7 @@ class Importer:
         self.spreader.move_to(line)
 
     def clone_goodies(self, to_loc, from_loc):
+        self.changed = True
         data_from = self.data[from_loc]
         data_to = self.data[to_loc]
         for k in data_from.keys():
@@ -450,6 +460,7 @@ class Importer:
         self._perform_jump(loc, callback=self.swap_goodies, callback_args={"from_loc":base})
 
     def swap_goodies(self, to_loc, from_loc):
+        self.changed = True
         data_from = self.data[from_loc]
         data_to = self.data[to_loc]
         for k in data_from.keys():
@@ -503,6 +514,7 @@ class Importer:
         exporter.end()
 
     def _do_lead_rest(self, *, line):
+        self.changed = True
         datum = self.data[self.order[line]]
         datum["note"] = ""
         datum["note_ui"] = "-"
@@ -525,7 +537,7 @@ class Importer:
         self.last_note = got
         datum["note"] = got
         datum["note_ui"] = getLyForMidiNote(got)
-        # self.spreader.refresh_line(line)
+        self.changed = True
         return True
 
     def _do_down_note(self, *, line):
@@ -545,7 +557,7 @@ class Importer:
         self.last_note = got
         datum["note"] = got
         datum["note_ui"] = getLyForMidiNote(got)
-        # self.spreader.refresh_line(line)
+        self.changed = True
         return True
 
     def _do_up_octave(self, *, line):
@@ -565,7 +577,7 @@ class Importer:
         self.last_note = got
         datum["note"] = got
         datum["note_ui"] = getLyForMidiNote(got)
-        # self.spreader.refresh_line(line)
+        self.changed = True
         return True
 
     def _do_down_octave(self, *, line):
@@ -587,7 +599,7 @@ class Importer:
         self.last_note = got
         datum["note"] = got
         datum["note_ui"] = getLyForMidiNote(got)
-        # self.spreader.refresh_line(line)
+        self.changed = True
         return True
 
     def _do_up_on_scale(self, *, line):
@@ -624,7 +636,7 @@ class Importer:
         self.last_note = trial
         datum["note"] = trial
         datum["note_ui"] = getLyForMidiNote(trial)
-        # self.spreader.refresh_line(line)
+        self.changed = True
         return True
 
     def _do_down_on_scale(self, *, line):
@@ -661,7 +673,7 @@ class Importer:
         self.last_note = trial
         datum["note"] = trial
         datum["note_ui"] = getLyForMidiNote(trial)
-        # self.spreader.refresh_line(line)
+        self.changed = True
         return True
 
     def _do_sample_note(self, *, line):
@@ -842,6 +854,8 @@ class Importer:
         return ret
 
     def save(self):
+        if not self.changed:
+            return
         with self.data_file.open("w", newline='') as csvfile:
             fieldnames = ['location', 'lyric', 'mark', 'track-change', "chord-change", "note"]
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction='ignore', dialect=ImportCsvDialect)
