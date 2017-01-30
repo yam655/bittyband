@@ -10,7 +10,7 @@ from mido import Message
 from ..midinames import getLyForMidiNote
 from .csvplayer import CsvPlayer
 from ..utils.cmdutils import *
-from ..utils.time import human_duration, from_human_duration
+from ..utils.time import human_duration, from_human_duration, filename_iso_time
 from .importcsvdialect import ImportCsvDialect
 from ..exportly import ExportLy
 from ..exportmidi import ExportMidi
@@ -685,6 +685,11 @@ class Importer:
         self.spreader.show_status("Done...")
         return False
 
+    def _do_backup(self, *, line):
+        self.backup()
+        self.spreader.show_status("Backup complete.")
+        return True
+
     def prepare_keys(self, spreader):
         self.spreader = spreader
         spreader.register_idle(self._do_idle)
@@ -720,6 +725,7 @@ class Importer:
             'N' / 'n' : nudge explicitly
             'P' / 'p' : play Audio + MIDI
             'R' / 'r' : set note to REST
+            'S' / 's' : save a backup
             'T' / 't' : mark as start of track
             'X' / 'x' : export as plain text
             'Y' / 'y' : export to Lilypond
@@ -762,6 +768,8 @@ class Importer:
         spreader.register_key(self._do_export_txt, "X", "x", arg="?str",
                             prompt="Export to plain text  (^G to cancel; ENTER to name 'export.txt'.]",
                             description="Export to text file")
+        spreader.register_key(self._do_backup, "S", "s", arg="...slow", prompt="Backing up...",
+                              description="Save a backup of the song data")
         spreader.register_key(self._do_line_mark, "/",
                               description="change the line separator indicator in the lyrics")
         spreader.register_key(self._do_up_octave, "'",
@@ -863,6 +871,23 @@ class Importer:
             for location in self.order:
                 writer.writerow(self.data[location])
         with open(str(self.bits["metadata"]), 'w') as meta:
+            self.metadata.write(meta)
+
+    def backup(self):
+        dsecs = self.data_file.stat().st_mtime
+        meta_file = Path(self.bits["metadata"])
+        msecs = meta_file.stat().st_mtime
+        secs = max(dsecs, msecs)
+        suffix = filename_iso_time(secs)
+        backup_data = self.data_file.with_name("{}-{}{}".format(self.data_file.stem, suffix, self.data_file.suffix))
+        backup_meta = meta_file.with_name("{}-{}{}".format(meta_file.stem, suffix, meta_file.suffix))
+        with backup_data.open("w", newline='') as csvfile:
+            fieldnames = ['location', 'lyric', 'mark', 'track-change', "chord-change", "note"]
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction='ignore', dialect=ImportCsvDialect)
+            writer.writeheader()
+            for location in self.order:
+                writer.writerow(self.data[location])
+        with backup_meta.open('w') as meta:
             self.metadata.write(meta)
 
     def get_line(self, what, max_len):

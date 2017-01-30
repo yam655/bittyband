@@ -65,3 +65,12 @@ def reasonable_time(seconds, local=True):
     else:
         t = time.gmtime(seconds)
     return time.strftime("(%a) %Y-%m-%d %H:%M", t)
+
+def filename_iso_time(seconds, local=True):
+    if isinstance(seconds, str):
+        seconds = float(seconds)
+    if local:
+        t = time.localtime(seconds)
+    else:
+        t = time.gmtime(seconds)
+    return time.strftime("%Y%m%dT%H%M%S", t)
