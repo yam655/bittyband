@@ -4,6 +4,7 @@ import csv
 from pathlib import Path
 from configparser import ConfigParser
 
+import mido
 import pyglet
 from mido import Message
 
@@ -33,6 +34,7 @@ class Importer:
         self.playing_row = None
         self.project_dir = Path(config["instance"]["project_dir"])
         self.changed = False
+        self.last_bpm_tap = ""
 
     def wire(self, *, ui, import_lister, csv_player, push_player, **kwargs):
         self.ui = ui
@@ -186,6 +188,47 @@ class Importer:
         self.changed = True
         return False
 
+    def _do_beat_repeat(self, bpm, *, line):
+        if line < 0 or bpm is None:
+            return self.last_bpm_tap
+        self.last_bpm_tap = bpm
+        i = 0
+        while i < len(bpm) and bpm[i].isnumeric():
+            i += 1
+        end = i
+        while i < len(bpm) and bpm[i].isspace():
+            i += 1
+        if i >= len(bpm):
+            self.spreader.show_status("Unrecognized rate: " + bpm)
+            return True
+
+        try:
+            rep = int(bpm[:end])
+        except ValueError:
+            self.spreader.show_status("Illegal rate: " + bpm)
+            return True
+
+        if bpm[i] in "Xx/@":
+            i += 1
+        check = self.parse_timecode(timecode = bpm[i:], line = line)
+        if check is None:
+            self.spreader.show_status("Problem parsing rate: " + bpm)
+            return True
+        offset = check - self.order[line]
+        location = self.order[line]
+        bottom = self.order[-1]
+        x = 0
+        while x < rep:
+            location += offset
+            if location < 0.0 or location > bottom:
+                break
+            if location not in self.data:
+                self.add_row(location)
+            x += 1
+        self.spreader.show_status("{} rows added every {}".format(x, human_duration(offset, 3)))
+        self.changed = True
+        return False
+
     _track_change_states = ["", "crap", "resume", "unknown", "track"]
 
     def _do_track(self, *, line):
@@ -321,12 +364,69 @@ class Importer:
                 self.data[t]["mark"] = "Track @{}".format(human_duration(t,0))
             self.metadata[str(t)]["title"] = self.data[t]["mark"]
 
-    def _do_jump(self, timecode, *, line):
+    def parse_timecode(self, *, timecode, line):
         if timecode is None or timecode.strip() == "":
-            return False
-        location = from_human_duration(timecode)
+            return None
+        timecode = timecode.lower().strip()
+        if ":" in timecode:
+            location = from_human_duration(timecode)
+        elif timecode.endswith("beat") or timecode.endswith("beats"):
+            if timecode.endswith("beat"):
+                timecode = timecode[:-4].strip()
+            else:
+                timecode = timecode[:-5].strip()
+            negate = 1
+            if timecode.startswith("-"):
+                negate = -1
+                timecode = timecode[1:].strip()
+            trial = 1
+            if len(timecode) > 0:
+                try:
+                    trial = float(timecode)
+                except ValueError:
+                    return None
+            next = line+1
+            if next == len(self.order):
+                next -= 1
+            offset = self.order[next]  - self.order[line]
+            location = self.order[line] + offset * trial * negate
+
+        elif timecode.endswith("bpm") or timecode.endswith("b"):
+            if timecode.endswith("b"):
+                timecode = timecode[:-1].strip()
+            else:
+                timecode = timecode[:-3].strip()
+            negate = 1
+            if timecode.startswith("-"):
+                negate = -1
+                timecode = timecode[1:]
+            if "@" in timecode:
+                s = timecode.split("@", 1)
+            elif "/" in timecode:
+                s = timecode.split("/", 1)
+            elif "x" in timecode:
+                s = timecode.split("x", 1)
+            else:
+                s = ["1", timecode]
+            try:
+                offset = mido.bpm2tempo(int(timecode.strip())) / 1000000 * int(s[0].strip()) * negate
+
+            except ValueError:
+                return None
+            location = self.order[line] + offset
+
+        else:
+            try:
+                offset = float(timecode)
+            except ValueError:
+                return None
+            location = self.order[line] + offset
+        return location
+
+    def _do_jump(self, timecode, *, line):
+        location = self.parse_timecode(timecode=timecode, line=line)
         if location is None:
-            self.spreader.show_status("Invalid timecode: {}".format(timecode))
+            self.spreader.show_status("Invalid timecode or offset: {}".format(timecode))
         else:
             self._perform_jump(location)
 
@@ -792,6 +892,8 @@ class Importer:
                               description="Nudge this note explicitly between the current spot and the two around it it.")
         spreader.register_key(self._do_repeat_mark, ":",
                               description="Repeat the marked section")
+        spreader.register_key(self._do_beat_repeat, "B", "b", arg="?str",
+                              prompt="How many and at what rate? (like: 6x120bpm or 3x2@120bpm")
 
     def scan(self):
         self.import_file = self.config["instance"]["import-file"]
@@ -816,6 +918,10 @@ class Importer:
     def add_row(self, location, *, mark=""):
         if location in self.data:
             raise IndexError("location {} already present in data".format(location))
+        if self.order and location > self.order[-1]:
+            raise IndexError("location {} can't be bigger than file".format(location))
+        if location < 0:
+            raise IndexError("location {} can't be less than zero".format(location))
         row = {"location":location, "mark":mark, "lyric":"", "track_ui":"", "chord_ui":"",
                "chord-change":"", "track-change":"", "note":"", "note_ui":"-"}
         self.data[location]  = row
