@@ -13,16 +13,17 @@ from .importer import Importer
 from .utils.time import human_duration, reasonable_time
 
 class ImportLister:
-    order = []
-    data = {}
-    ui = None
-    player = None
-    last_player_time = None
-    play_length = None
 
     def __init__(self, config):
         self.config = config
         self.project_dir = Path(config["instance"]["project_dir"])
+        self.order = []
+        self.data = {}
+        self.ui = None
+        self.player = None
+        self.last_player_time = None
+        self.play_length = None
+        self.lister = None
 
     def wire(self, *, ui, **kwargs):
         self.ui = ui
@@ -52,6 +53,22 @@ class ImportLister:
             offset -= self.play_length
         self.player.seek(offset)
         self.player.play()
+
+    def _do_remove(self, confirm, *, line):
+        if confirm is None or confirm.lower() != "yes":
+            return False
+        datum = self.data[self.order[line]]
+        meta = ConfigParser()
+        metadata_file = Path(datum["metadata"])
+        if metadata_file.exists():
+            meta.read(filenames=str(metadata_file))
+            meta["audio"]["deleted"] = "DELETED"
+            with open(str(metadata_file), 'w') as out:
+                meta.write(out)
+        self.scan()
+        if self.lister is not None:
+            self.lister.invalidate = True
+        return True
 
     def _do_play(self, line):
         datum = self.data[self.order[line]]
@@ -126,6 +143,7 @@ class ImportLister:
 
 
     def prepare_keys(self, lister):
+        self.lister = lister
         lister.register_key(self._do_play, "P", "p", arg="...slow", prompt="Playing...",
                             description="Play this file.")
         lister.register_key(self._do_importer, "I", "i", "^J",
@@ -139,6 +157,9 @@ class ImportLister:
         lister.register_key(self._do_export_txt, "X", "x", "T", "t", arg="?str",
                             prompt="Export to plain text  (^G to cancel; ENTER to name '$BASENAME.txt'.]",
                             description="Export to text file")
+        lister.register_key(self._do_remove, "D", "d", arg="?str",
+                            prompt="Delete entry? YES to confirm.",
+                            description="Mark this entry as deleted.")
 
     def get_order(self):
         return self.order
@@ -219,7 +240,8 @@ class ImportLister:
                 with open(str(metadata_file), 'w') as out:
                     meta.write(out)
 
-            sortable_order.append((int(metadata_file.stat().st_mtime), float(meta["audio"]["modified"]), metadata_file.stem))
+            if "deleted" not in meta["audio"]:
+                sortable_order.append((int(metadata_file.stat().st_mtime), float(meta["audio"]["modified"]), metadata_file.stem))
             title = meta["audio"]["title"]
             length_secs = float(meta["audio"]["length"])
             total_length = human_duration(length_secs)

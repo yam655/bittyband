@@ -94,15 +94,16 @@ class FieldReader:
         elif key in ("^P", "KEY_UP"):
             buf = "".join(self.data)
             i = self.cursor - self.x1
-            if i >= len(buf):
-                i = len(buf) - 1
-            if buf[i].isspace():
-                while i >= 0 and buf[i].isspace():
+            if i > 0:
+                if i >= len(buf):
+                    i = len(buf) - 1
+                if buf[i].isspace():
+                    while i >= 0 and buf[i].isspace():
+                        i -= 1
+                while i >= 0 and not buf[i].isspace():
                     i -= 1
-            while i >= 0 and not buf[i].isspace():
-                i -= 1
-            self.move(i + self.x1)
-            self.stdscr.refresh()
+                self.move(i + self.x1)
+                self.stdscr.refresh()
         return True
 
     def refresh(self):
