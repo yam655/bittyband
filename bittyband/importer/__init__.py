@@ -1001,9 +1001,11 @@ class Importer:
         padout=max_len - 23
         marklen = int(padout // 3)
         lyrlen = int(padout * 2 // 3)
+        loc = human_duration(datum["location"], floor=3)
+        lyrlen -= len(loc) - 9
         return "{human_time} {note_ui:5.5} {lyric:{lyrlen}.{lyrlen}} {chord_ui: >3.3} {track_ui: >3.3} {mark:{marklen}.{marklen}}".format(
             marklen=marklen, lyrlen=lyrlen,
-            human_time=human_duration(datum["location"], floor=3), **datum)
+            human_time=loc, **datum)
 
     def get_order(self):
         return self.order

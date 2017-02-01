@@ -22,6 +22,7 @@ class FieldReader:
         self.x2 = x2
         self.cursor = x1
         self.next_of_kind = False
+        self.prev_of_kind = False
         self.apply_change = False
 
     def move(self, x = None):
@@ -65,12 +66,15 @@ class FieldReader:
             if self.cursor < self.x2 and self.cursor - self.x1 < len(self.data):
                 self.move(self.cursor + 1)
                 self.refresh()
-        elif key in "^G":
+        elif key in ("^G", "^["):
             raise GetStrInterrupt()
         elif key in ("^J", "KEY_ENTER"):
             return False
         elif key == "^I":
             self.next_of_kind = True
+            return False
+        elif key == "KEY_BTAB":
+            self.prev_of_kind = True
             return False
         elif key == "^R":
             self.apply_change = True
@@ -94,15 +98,16 @@ class FieldReader:
         elif key in ("^P", "KEY_UP"):
             buf = "".join(self.data)
             i = self.cursor - self.x1
-            if i >= len(buf):
-                i = len(buf) - 1
-            if buf[i].isspace():
-                while i >= 0 and buf[i].isspace():
+            if i > 0:
+                if i >= len(buf):
+                    i = len(buf) - 1
+                if buf[i].isspace():
+                    while i >= 0 and buf[i].isspace():
+                        i -= 1
+                while i >= 0 and not buf[i].isspace():
                     i -= 1
-            while i >= 0 and not buf[i].isspace():
-                i -= 1
-            self.move(i + self.x1)
-            self.stdscr.refresh()
+                self.move(i + self.x1)
+                self.stdscr.refresh()
         return True
 
     def refresh(self):
@@ -143,6 +148,7 @@ class GenericLister:
         self.ui = None
         self.invalidate = False
         self.next_of_kind = False
+        self.prev_of_kind = False
         self.apply_change = False
 
     def wire(self, *, logic, ui, **kwargs):
@@ -217,6 +223,7 @@ class GenericLister:
         fr = FieldReader(self, self.stdscr, max_y - 1, 0, max_x)
         s = fr.get(initial)
         self.next_of_kind = fr.next_of_kind
+        self.prev_of_kind = fr.prev_of_kind
         self.apply_change = fr.apply_change
         self.stdscr.hline(max_y - 2, 0, "=", max_x)
         self.stdscr.addstr(" ")
@@ -290,7 +297,7 @@ class GenericLister:
                 elif entry.arg == "?str":
                     initial = ""
                     self.next_of_kind = True
-                    while self.next_of_kind or self.apply_change:
+                    while self.next_of_kind or self.apply_change or self.prev_of_kind:
                         if entry.query:
                             initial = entry.function(None, line=-self.active)
                         s = self.read_string(entry.prompt, initial=initial)
@@ -299,6 +306,8 @@ class GenericLister:
                                 self.refresh_line(self.active)
                         if self.next_of_kind:
                             self.move_to(self.active + 1)
+                        if self.prev_of_kind:
+                            self.move_to(self.active - 1)
                 elif entry.arg == "...slow":
                     self.show_status(entry.prompt)
                     if entry.function(line=self.active):
