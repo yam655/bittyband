@@ -255,6 +255,16 @@ class GenericLister:
         self.move_to(self.active + 1)
         return False
 
+    def _page_up_cmd(self, line):
+        max_y = self.stdscr.getmaxyx()[0]
+        self.move_to(self.active + int(max_y / 2))
+        return False
+
+    def _page_down_cmd(self, line):
+        max_y = self.stdscr.getmaxyx()[0]
+        self.move_to(self.active - int(max_y / 2))
+        return False
+
     def _help_cmd(self, line):
         return True
 
@@ -269,6 +279,10 @@ class GenericLister:
                           description="Move down a row")
         self.register_key(self._up_cmd, "KEY_UP",
                           description="Move up a row")
+        self.register_key(self._page_down_cmd, "KEY_SR",
+                          description="Move down several row")
+        self.register_key(self._page_up_cmd, "KEY_SF",
+                          description="Move up several row")
         self.register_key(self._refresh_cmd, "^L", "^R",
                           description="Refresh the window")
         self.register_key(self._help_cmd, "?",

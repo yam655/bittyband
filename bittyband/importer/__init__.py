@@ -212,7 +212,7 @@ class Importer:
             i += 1
         check = self.parse_timecode(timecode = bpm[i:], line = line)
         if check is None:
-            self.spreader.show_status("Problem parsing rate: " + bpm)
+            self.spreader.show_status("Problem parsing rate: {} (around {})".format(bpm, bpm[i:]))
             return True
         offset = check - self.order[line]
         location = self.order[line]
@@ -409,7 +409,7 @@ class Importer:
             else:
                 s = ["1", timecode]
             try:
-                offset = mido.bpm2tempo(int(timecode.strip())) / 1000000 * int(s[0].strip()) * negate
+                offset = mido.bpm2tempo(int(s[-1].strip())) / 1000000 * int(s[0].strip()) * negate
 
             except ValueError:
                 return None
@@ -558,6 +558,20 @@ class Importer:
             return
         loc = base + offset
         self._perform_jump(loc, callback=self.swap_goodies, callback_args={"from_loc":base})
+
+    def _do_swap_up(self, *, line):
+        if line > 0:
+            self.swap_goodies(self.order[line], self.order[line - 1])
+            self.spreader.move_to(line - 1)
+            self._do_idle()
+            self.spreader.move_to(line)
+
+    def _do_swap_down(self, *, line):
+        if line < len(self.order) - 1:
+            self.swap_goodies(self.order[line], self.order[line + 1])
+            self.spreader.move_to(line + 1)
+            self._do_idle()
+            self.spreader.move_to(line)
 
     def swap_goodies(self, to_loc, from_loc):
         self.changed = True
@@ -827,6 +841,8 @@ class Importer:
             'R' / 'r' : set note to REST
             'S' / 's' : save a backup
             'T' / 't' : mark as start of track
+            'W' : swap with above line
+            'w' : swap with below line
             'X' / 'x' : export as plain text
             'Y' / 'y' : export to Lilypond
 
@@ -894,6 +910,10 @@ class Importer:
                               description="Repeat the marked section")
         spreader.register_key(self._do_beat_repeat, "B", "b", arg="?str",
                               prompt="How many and at what rate? (like: 6x120bpm or 3x2@120bpm")
+        spreader.register_key(self._do_swap_up, "W",
+                              description="Swap data with line above")
+        spreader.register_key(self._do_swap_down, "w",
+                              description="Swap data with line below")
 
     def scan(self):
         self.import_file = self.config["instance"]["import-file"]
@@ -1017,13 +1037,13 @@ class Importer:
         basis = self.find_song_data(song)
         out = self.metadata[str(song)]
         out["bpm"] = str(basis.get("bpm", "120"))
-        out["lily_key"] = basis.get("lily_key", r"c \major")
+        out["lily_key"] = basis.get("lily_key", r"g \major")
         out["copyright"] = basis.get("copyright", "")
         if "tagline" in basis:
             out["tagline"] = basis["tagline"]
         out["poet"] = basis.get("poet", "")
         out["time"] = basis.get("time", "4/4")
-        out["key"] = basis.get("key", "60")
+        out["key"] = basis.get("key", "67")
         out["scale"] = basis.get("scale", "1 2 3 4 5 6 7")
         out["lead_instrument"] = str(basis.get("lead_instrument","0"))
         out["pad_instrument"] = str(basis.get("pad_instrument","0"))

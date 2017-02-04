@@ -18,27 +18,27 @@ LEAD_CHANNEL = 0
 PAD_CHANNEL = 1
 DRUM_CHANNEL = 9
 
-PAD_VELOCITY = 32
+PAD_VELOCITY = 64
 
 
 class Commands:
-    config = None
-    lead_chords = [0, 2, 4]
-    pad_chords = [0, 2, 4]
-    pad_chord_idx = -1
-    pad_chord_seq = []
-    scale = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
-    active_preset = None
-    lead_note = None
-    pad_note = None
-    key_note = 60
-    pad_instrument = 0
-    lead_instrument = 0
-    ui = None
-    message_time = 0
 
     def __init__(self, config):
         self.config = config
+        self.lead_chords = [0, 2, 4]
+        self.pad_chords = [0, 2, 4]
+        self.pad_chord_idx = -1
+        self.pad_chord_seq = []
+        self.scale = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+        self.active_preset = None
+        self.lead_note = None
+        self.pad_note = None
+        self.key_note = 60
+        self.pad_instrument = 0
+        self.lead_instrument = 0
+        self.ui = None
+        self.message_time = 0
+        self.background_on = False
 
     def wire(self, *, push_player, push_recorder=None, ui=None, metronome, **kwargs):
         self.player = push_player
@@ -74,6 +74,7 @@ class Commands:
                             time.sleep(s)
                 if cmd[0] == "!":
                     continue
+                sys.stderr.write(cmd + "\n\r")
                 action = action_mapping.get(cmd)
                 if action is not None:
                     action(self, cmd)
@@ -109,16 +110,19 @@ class Commands:
         self.player.sync_comment("repeating chord")
         self.set_pad_note(self.pad_chord_seq[self.pad_chord_idx])
 
-    def do_preset(self, what):
+    def do_preset(self, what, *, note_it = False):
         global LEAD_CHANNEL
         global PAD_CHANNEL
         if what is None:
             return
 
-        self.pad_chord_idx = -1
-        self.pad_chord_seq = []
+        if what != self.active_preset:
+            self.pad_chord_idx = -1
+            self.pad_chord_seq = []
         title = self.config[what]["title"]
         midi_set = []
+        if self.cmdrecorder is not None and note_it:
+            self.cmdrecorder.add(what)
         if self.ui is not None:
             if title is not None:
                 self.ui.putln("\nPreset Setting to: {}".format(title))
@@ -215,10 +219,18 @@ class Commands:
         if isinstance(note, int):
             self.player.feed_midi(
                 Message('note_on', note=note, channel=PAD_CHANNEL, time=self.message_time, velocity=PAD_VELOCITY))
+            if self.ui is not None:
+                self.ui.puts("< {} > ".format(getLyForMidiNote(note)))
         elif hasattr(note, "__iter__"):
             note_set = []
+            if self.ui is not None:
+                self.ui.puts("< ")
             for pn in note:
                 note_set.append(Message('note_on', note=pn, channel=PAD_CHANNEL, velocity=PAD_VELOCITY))
+                if self.ui is not None:
+                    self.ui.puts("{} ".format(getLyForMidiNote(pn)))
+            if self.ui is not None:
+                self.ui.puts("> ")
             self.player.feed_midi(*note_set, time=self.message_time, abbr="chord_on")
             self.message_time = 0
         elif note is None:
@@ -251,14 +263,14 @@ class Commands:
         self.message_time = 0
         self.set_pad_note()
         # marks MIDI stream (quite crappy/poorly supported)
-        self.do_preset(self.active_preset)
+        self.do_preset(self.active_preset, note_it=True)
 
     def do_mark_bad(self, what):
         self.set_lead_note()
         self.message_time = 0
         self.set_pad_note()
         # marks MIDI stream (quite crappy/poorly supported)
-        self.do_preset(self.active_preset)
+        self.do_preset(self.active_preset, note_it=True)
 
     def do_next(self, what):
         self.do_mark_good(what)
@@ -272,15 +284,20 @@ class Commands:
             self.key_note -= OCTAVE_STEPS
 
     def do_play_pause(self, name):
-        if not self.background.is_stopped():
-            self.lead_note()
-            self.pad_note()
-        self.background.play_pause()
+        if self.background_on:
+            self.set_lead_note()
+            self.set_pad_note()
+            self.background.pause()
+            self.background_on = False
+        else:
+            self.background.play()
+            self.background_on = True
 
     def do_rewind(self, name):
         self.background.rewind()
-        self.lead_note()
-        self.pad_note()
+        self.background.pause()
+        self.set_lead_note()
+        self.set_pad_note()
         self.pad_chord_idx = -1
 
     def do_menu(self, name):
