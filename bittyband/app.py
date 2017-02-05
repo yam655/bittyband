@@ -8,7 +8,7 @@ from .player import PushButtonPlayer
 from .ui import get_ui
 from .cmdrecorder import CommandRecorder
 from .jamlister import JamLister
-from .bgplayer import BackgroundDrums
+from .bgplayer import BackgroundDrums, BackgroundNull
 from .importer import Importer
 from .importlister import ImportLister
 
@@ -17,8 +17,8 @@ def app(config):
     wiring = {}
     wiring["ui"] = ui = ui_maker(config)
     wiring["push_player"] = PushButtonPlayer(config)
-    wiring["metronome"] = BackgroundDrums(config)
     wiring["push_commands"] = Commands(config)
+    wiring["metronome"] = BackgroundDrums(config)
 
     need_for_mode = []
     mode = lambda: True
@@ -29,6 +29,7 @@ def app(config):
 
     elif config["instance"]["mode"] == "list":
         wiring["jam_lister"] = JamLister(config)
+        wiring["metronome"] = BackgroundNull(config)
         need_for_mode = ["push_player", "metronome"]
         mode = ui.start_list
 

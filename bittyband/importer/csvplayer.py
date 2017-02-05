@@ -79,9 +79,23 @@ class CsvPlayer:
                 return
             datum = self.importer.data[self.importer.order[self.__line]]
         new_track = datum.get("track_id",-1)
+        if self.last_location != 0:
+            message_time = datum["location"] - self.last_location
+        else:
+            message_time = 0
+        if not self.exporting and self.realtime and message_time > 0:
+            time.sleep(message_time)
+        else:
+            self.message_time += int(message_time * 1000)
         if new_track != self.last_track:
             self.last_track = new_track
             self.track_info = self.importer.song_data[self.last_track]
+            old_pad_note = self.pad_note
+            old_lead_note = self.lead_note
+            if old_pad_note is not None:
+                self.set_pad_note()
+            if old_lead_note is not None:
+                self.set_lead_note()
             if self.last_track >= 0:
                 self.player.new_track(**self.track_info)
             else:
@@ -90,15 +104,11 @@ class CsvPlayer:
                                           program=self.track_info["lead_instrument"], time=0))
             self.player.feed_midi(Message('program_change', channel=PAD_CHANNEL,
                                           program=self.track_info["pad_instrument"], time=0))
-        if self.last_location != 0:
-            message_time = datum["location"] - self.last_location
-        else:
-            message_time = 0
+            if old_pad_note is not None:
+                self.set_pad_note(old_pad_note)
+            if old_lead_note is not None:
+                self.set_lead_note(old_lead_note)
         self.last_location = datum["location"]
-        if not self.exporting and self.realtime and message_time > 0:
-            time.sleep(message_time)
-        else:
-            self.message_time += int(message_time * 1000)
 
         if not self.playing and not self.exporting:
             return
