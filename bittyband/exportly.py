@@ -41,7 +41,14 @@ class LilypondFile:
         self.filename = None
 
     def is_empty(self):
-        return not self.melody and not self.chords and not self.lyrics
+        empty = True
+        for m in self.melody:
+            if len(m) == 2 and m[-1] > 0:
+                empty = False
+        for c in self.chords:
+            if len(c) == 2 and c[-1] > 0:
+                empty = False
+        return empty and not self.lyrics
 
     def add_time(self, nu, de):
         if not self.melody:
@@ -127,10 +134,11 @@ class LilypondFile:
                 if n[1] > 0:
                     ch = lengthen_notes(n[0], n[1], self.time_nu, self.time_de)
                     if len(ch) == 1:
-                        result.append("    {} % {} whole notes at 120 BPM".format(ch[0], n[1]))
+                        # result.append("    {} % {} 1/4 notes at {} BPM".format(ch[0], n[1], self.bpm))
+                        result.append("    {}".format(ch[0]))
                     else:
                         result.append(" ".join(ch))
-                        result.append("            % {} whole notes at 120 BPM".format(n[1]))
+                        # result.append("            % {} 1/4 notes at {} BPM".format(n[1], self.bpm))
                 if len(n) > 2:
                     for c in n[2:]:
                         result.append("            {}".format(c))
@@ -146,12 +154,11 @@ class LilypondFile:
                 if n[1] > 0:
                     ch = lengthen_notes(n[0], n[1], self.time_nu, self.time_de)
                     if len(ch) == 1:
-                        result.append("    {} % {} whole notes at 120 BPM".format(ch[0], n[1]))
+                        result.append("    {}".format(ch[0]))
+                        # result.append("    {} % {} 1/4 notes at {} BPM".format(ch[0], n[1], self.bpm))
                     else:
                         result.append(" ".join(ch))
-                        result.append("            % {} whole notes at 120 BPM".format(n[1]))
-                else:
-                    result.append("    {} % {} whole notes at 120 BPM".format(n[0], n[1]))
+                        # result.append("            % {} 1/4 notes at {} BPM".format(n[1], self.bpm))
 
                 if len(n) > 2:
                     for c in n[2:]:
@@ -231,14 +238,16 @@ class ExportLy:
         pass
 
     def end(self):
-        if len(self.lilies) == 1:
+        usable = []
+        for lil in self.lilies:
+            if not lil.is_empty():
+                usable.append(lil)
+        if len(usable) == 1:
             with self.filenm.open("wt") as out:
-                out.write(format(self.lily))
+                out.write(format(usable[0]))
         else:
             i = 0
-            for lily in self.lilies:
-                if lily.is_empty():
-                    continue
+            for lily in usable:
                 i += 1
                 if lily.filename is None:
                     filename = self.filenm.with_name("{}-{}{}".format(self.filenm.stem, i, self.filenm.suffix))
@@ -252,6 +261,7 @@ class ExportLy:
         self.lily = LilypondFile()
         self.lilies.append(self.lily)
         self.lily.bpm = bpm
+        self.beat = mido.bpm2tempo(int(bpm)) / 1000
         t = parse_timing(time)
         if t is not None:
             t = t.split("/")
@@ -312,12 +322,12 @@ class ExportLy:
         if what_type == "note_on":
             if channel == LEAD_CHANNEL:
                 if self.lead_time > 0:
-                    self.lily.melody.append(["r", self.lead_time / 1000])
+                    self.lily.melody.append(["r", self.lead_time / self.beat])
                     self.lead_time = 0
                 self.lily.melody.append([chunk, 0])
             elif channel == PAD_CHANNEL:
-                if self.pad_time:
-                    self.lily.chords.append(["r", self.pad_time / 1000])
+                if self.pad_time > 0:
+                    self.lily.chords.append(["r", self.pad_time / self.beat])
                     self.pad_time = 0
                 self.lily.chords.append([chunk, 0])
             else:
@@ -325,15 +335,15 @@ class ExportLy:
         elif what_type == "note_off":
             if channel == LEAD_CHANNEL:
                 if len(self.lily.melody) > 0 and self.lily.melody[-1][1] == 0:
-                    self.lily.melody[-1][1] = self.lead_time / 1000
+                    self.lily.melody[-1][1] = self.lead_time / self.beat
                 else:
-                    self.lily.melody.append(["r", self.lead_time / 1000])
+                    self.lily.melody.append(["r", self.lead_time / self.beat])
                 self.lead_time = 0
             elif channel == PAD_CHANNEL:
                 if len(self.lily.chords) > 0 and self.lily.chords[-1][1] == 0:
-                    self.lily.chords[-1][1] = self.pad_time / 1000
+                    self.lily.chords[-1][1] = self.pad_time / self.beat
                 else:
-                    self.lily.chords.append(["r", self.pad_time / 1000])
+                    self.lily.chords.append(["r", self.pad_time / self.beat])
                 self.pad_time = 0
             else:
                 self.feed_comment("[{}] {}".format(what_type, chunk), channel=channel)
@@ -397,11 +407,12 @@ class ExportLy:
             self.feed_comment("{!r}".format(what), channel=channel)
 
 
-def lengthen_notes(note, r = 0.25, nu = 4, de = 4):
+def lengthen_notes(note, r = 1, nu = 4, de = 4):
     ch = []
     nude = 1
     if nu is not None and de is not None:
         nude = nu / de
+    r = r / 4
     if nude >= 1:
         while r > 0.8:
             if len(ch) == 0:
