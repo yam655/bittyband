@@ -19,6 +19,7 @@ from ..exporttxt import ExportTxt
 from ..commands import LEAD_CHANNEL, PAD_CHANNEL
 
 
+
 class Importer:
     def __init__(self, config):
         self.config = config
@@ -35,6 +36,7 @@ class Importer:
         self.project_dir = Path(config["instance"]["project_dir"])
         self.changed = False
         self.last_bpm_tap = ""
+        self.last_nudge = ""
 
     def wire(self, *, ui, import_lister, csv_player, push_player, **kwargs):
         self.ui = ui
@@ -188,10 +190,31 @@ class Importer:
         self.changed = True
         return False
 
+    def _split_words(self, line):
+        datum = self.data[self.order[line]]
+        words = break_on_lily_words(datum["lyric"])
+        if line == len(self.order):
+            self.spreader.show_status("Can't do that on the last line.")
+            return True
+        segments = len(words)
+        available_space = self.order[line+1] - self.order[line]
+        offset = available_space / segments
+        starting_at = self.order[line]
+        for idx in range(1,segments):
+            location = starting_at + offset * idx
+            if location in self.data:
+                self.spreader.show_status("Woah. Didn't expect {} to be present. Stopping.".format(location))
+                return True
+            self.add_row(location, lyric=words[idx])
+        datum["lyric"] = words[0]
+        return False
+
     def _do_beat_repeat(self, bpm, *, line):
         if line < 0 or bpm is None:
             return self.last_bpm_tap
         self.last_bpm_tap = bpm
+        if bpm.lower() == "word" or bpm.lower() == "words":
+            self._split_words(line)
         i = 0
         while i < len(bpm) and bpm[i].isnumeric():
             i += 1
@@ -505,11 +528,23 @@ class Importer:
         self._perform_jump(loc, callback=self.clone_goodies, callback_args={"from_loc":base})
 
     def _do_nudge(self, offset, *, line):
-        if line is None or line == "":
+        return self._perform_nudge(offset, line)
+
+    def _do_nudge_next(self, offset, *, line):
+        self._perform_nudge(offset, line + 1)
+        self.spreader.move_to(line)
+        return False
+
+
+    def _perform_nudge(self, offset, line):
+        if offset == "":
             return False
-        if line == 0 or line == len(self.order) -1:
+        if offset is None or line < 0:
+            return self.last_nudge
+        if line <= 0 or line >= len(self.order) -1:
             self.spreader.show_status("Can't nudge top or bottom.")
             return False
+        orig_offset = offset
         try:
             offset = float(offset)
         except ValueError:
@@ -523,7 +558,7 @@ class Importer:
         if line < len(self.order) - 1 and self.order[line+1] < location:
             self.spreader.show_status("Invalid offset: {}; can't go under {}".format(offset, self.order[line + 1]))
             return False
-
+        self.last_nudge = orig_offset
         self._perform_jump(location, callback=self.swap_goodies, callback_args={"from_loc": self.order[line]})
         line_now = line
         if offset < 0:
@@ -532,6 +567,7 @@ class Importer:
         self.spreader.move_to(line+1)
         self._do_idle()
         self.spreader.move_to(line)
+        return False
 
     def clone_goodies(self, to_loc, from_loc):
         self.changed = True
@@ -904,8 +940,10 @@ class Importer:
                               description="Sample the current lead note")
         spreader.register_key(self._do_lead_rest, "R", "r",
                               description="Set lead note to rest")
-        spreader.register_key(self._do_nudge, "N", "n", arg="?str", prompt="Nudge the current line up or down in seconds:",
+        spreader.register_key(self._do_nudge, "n", arg="?str", prompt="Nudge the current line up or down in seconds:",
                               description="Nudge this note explicitly between the current spot and the two around it it.")
+        spreader.register_key(self._do_nudge_next, "N", arg="?str", prompt="Nudge the next line up or down in seconds:",
+                              description="Nudge the next row (making current note longer/shorter).")
         spreader.register_key(self._do_repeat_mark, ":",
                               description="Repeat the marked section")
         spreader.register_key(self._do_beat_repeat, "B", "b", arg="?str",
@@ -935,14 +973,14 @@ class Importer:
         self.update_order()
         self.clean()
 
-    def add_row(self, location, *, mark=""):
+    def add_row(self, location, *, mark="", lyric=""):
         if location in self.data:
             raise IndexError("location {} already present in data".format(location))
         if self.order and location > self.order[-1]:
             raise IndexError("location {} can't be bigger than file".format(location))
         if location < 0:
             raise IndexError("location {} can't be less than zero".format(location))
-        row = {"location":location, "mark":mark, "lyric":"", "track_ui":"", "chord_ui":"",
+        row = {"location":location, "mark":mark, "lyric":lyric, "track_ui":"", "chord_ui":"",
                "chord-change":"", "track-change":"", "note":"", "note_ui":"-"}
         self.data[location]  = row
         return row
@@ -951,6 +989,9 @@ class Importer:
         self.order = list(self.data.keys())
         self.order.sort()
         self.save()
+
+    def return_value(self, line):
+        return False
 
     def clean(self):
         for r in self.data.values():
@@ -1051,3 +1092,14 @@ class Importer:
         out["pad_chords"] = basis.get("pad_chords", "1")
         out["pad_sequence"] = basis.get("pad_sequence", "I")
         out["pad_velocity"] = str(basis.get("pad_velocity", 64))
+
+
+
+def break_on_lily_words(words):
+    ret = []
+    for w in words.split():
+        if w in ("--", "__") and len(ret) > 0:
+            ret[-1] = ret[-1] + " " + w
+        else:
+            ret.append(w)
+    return ret

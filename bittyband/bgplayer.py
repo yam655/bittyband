@@ -35,7 +35,7 @@ class BackgroundDrums:
 
     def start(self):
         if self.thread is None:
-            self.thread = threading.Thread(target=self.runner, daemon=True)
+            self.thread = threading.Thread(target=self._runner, daemon=True)
             self.thread.start()
             self.pause()
 
@@ -44,7 +44,7 @@ class BackgroundDrums:
             self.queue.join()
             self.queue.put(None)
 
-    def runner(self):
+    def _runner(self):
         terminate = False
         while not terminate:
             try:
@@ -143,21 +143,10 @@ class BackgroundDrums:
     def rewind(self):
         self.queue.put("restart")
 
+
 class BackgroundNull:
 
     def __init__(self, config = None, player = None):
-        pass
-
-    def wire(self, *, push_player, **kwargs):
-        pass
-
-    def start(self):
-        pass
-
-    def end(self):
-        pass
-
-    def runner(self):
         pass
 
     def set_tempo(self, num, dem, tempo):

@@ -2,6 +2,7 @@
 
 import sys
 
+from .simplehelp import SimpleHelp
 from .importer import CsvPlayer
 from .commands import Commands
 from .player import PushButtonPlayer
@@ -19,6 +20,7 @@ def app(config):
     wiring["push_player"] = PushButtonPlayer(config)
     wiring["push_commands"] = Commands(config)
     wiring["metronome"] = BackgroundDrums(config)
+    wiring["help"] = SimpleHelp(config)
 
     need_for_mode = []
     mode = lambda: True
@@ -51,11 +53,14 @@ def app(config):
         pass
 
     for v in wiring.values():
-        v.wire(**wiring)
+        if hasattr(v, "wire"):
+            v.wire(**wiring)
     for thing in need_for_mode:
-        wiring[thing].start()
+        if hasattr(wiring[thing], "start"):
+            wiring[thing].start()
     try:
         mode()
     finally:
         for thing in need_for_mode:
-            wiring[thing].end()
+            if hasattr(wiring[thing], "end"):
+                wiring[thing].end()

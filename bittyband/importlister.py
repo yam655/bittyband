@@ -142,6 +142,9 @@ class ImportLister:
         importer.export_ly(output)
 
 
+    def return_value(self, line):
+        return False
+
     def prepare_keys(self, lister):
         self.lister = lister
         lister.register_key(self._do_play, "P", "p", arg="...slow", prompt="Playing...",
