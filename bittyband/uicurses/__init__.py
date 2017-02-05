@@ -39,8 +39,10 @@ class UiCurses:
         self._getch_queue = queue.Queue()
         self._getch_thread = None
         self.running = True
+        self.help = None
 
     def wire(self, **wiring):
+        self.help = wiring.get("help")
         self.wiring = wiring
 
     def get_key(self, block=True, timeout=None):
@@ -68,11 +70,12 @@ class UiCurses:
                 ret = "^?"
         return ret
 
-    def _switch(self, stdscr, generator, logic=None):
+    def _switch(self, stdscr, generator, *, logic=None, args=()):
         self.stdscrs.append(stdscr)
         item = generator(self.config)
-        item.wire(logic=logic, **self.wiring)
-        ret = item(stdscr)
+        if hasattr(item, "wire"):
+            item.wire(logic=logic, **self.wiring)
+        ret = item(stdscr, args=args)
         del self.stdscrs[-1]
         return ret
 
@@ -104,6 +107,14 @@ class UiCurses:
         if len(self.stdscrs) > 0:
             # curses.ungetch(ord("L") - ord("@"))
             curses.ungetch("Q")
+        return ret
+
+    def show_help(self, txt, *, stdscr = None):
+        if self.help is None:
+            return "Help isn't available on this system."
+        if stdscr is None and len(self.stdscrs) > 0:
+            stdscr = self.stdscrs[-1]
+        ret = self._switch(stdscr, GenericLister, logic="help", args=(txt,))
         return ret
 
     def play_ui(self, callback, *, seek=None):

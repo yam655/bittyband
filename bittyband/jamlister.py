@@ -27,6 +27,9 @@ class JamLister:
     def wire(self, *, push_commands, **kwargs):
         self.commands = push_commands
 
+    def prepare(self):
+        pass
+
     def _do_rename(self, title, line):
         if title == "" or title is None:
             self.rename(self.get_order()[line], "")
