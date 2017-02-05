@@ -80,7 +80,11 @@ class FieldReader:
             self.apply_change = True
             return False
         elif key == "^K":
-            self.data = self.data[:self.cursor - self.x1]
+            if self.cursor - self.x1 == len(self.data):
+                self.data = []
+                self.cursor = self.x1
+            else:
+                self.data = self.data[:self.cursor - self.x1]
             self.refresh()
         elif key == "^L":
             self.refresh()
@@ -150,13 +154,15 @@ class GenericLister:
         self.next_of_kind = False
         self.prev_of_kind = False
         self.apply_change = False
+        self._key_id = 0
 
     def wire(self, *, logic, ui, **kwargs):
         self.ui = ui
         self.keymap.clear()
         self._register_builtins()
         self.logic = kwargs[logic]
-        self.logic.prepare_keys(self)
+        if hasattr(self.logic, "prepare_keys"):
+            self.logic.prepare_keys(self)
 
     def refresh_status(self, *, no_refresh=False):
         max_y, max_x = self.stdscr.getmaxyx()
@@ -175,7 +181,10 @@ class GenericLister:
         if row < 0 or row >= max_y:
             return
         bit = self.logic.get_order()[line]
-        title = self.logic.get_line(bit, max_x - _INDICATOR_OFFSET * 2)
+        if hasattr(self.logic, "get_line"):
+            title = self.logic.get_line(bit, max_x - _INDICATOR_OFFSET * 2)
+        else:
+            title = bit[:max_x - _INDICATOR_OFFSET * 2]
         if line == self.active:
             self.stdscr.addstr(row, 0, ">  ", curses.A_REVERSE)
             self.stdscr.addstr(row, _INDICATOR_OFFSET, title, curses.A_REVERSE)
@@ -238,10 +247,26 @@ class GenericLister:
     def register_key(self, function, key, *variants, prompt="Enter value:", arg=None, description=None, query=False):
         keys = [key]
         keys.extend(variants)
-        entry = KeyEntry(function=function, prompt=prompt, arg=arg, keys=keys, description=description, query=query)
+        entry = KeyEntry(function=function, prompt=prompt, arg=arg, keys=keys, description=description, query=query, key_id=self._key_id)
+        self._key_id += 1
         self.keymap[key] = entry
         for k in variants:
             self.keymap[k] = entry
+
+    def active_variants(self, *, key=None, entry=None):
+        if entry is None:
+            entry = self.keymap.get(key)
+        if entry is None:
+            return []
+        id = entry.key_id
+        ret = []
+        for k in entry.keys:
+            t = self.keymap.get(k)
+            if t is None:
+                continue
+            if t.key_id == id:
+                ret.append(k)
+        return ret
 
     def _quit_cmd(self, line):
         self.running = False
@@ -266,7 +291,21 @@ class GenericLister:
         return False
 
     def _help_cmd(self, line):
-        return True
+        processed = set()
+        txt = ["", "This is the help. 'Q', 'q', or ESC (^]) to exit.", "", "The following keys are available:", ""]
+        for k in sorted(self.keymap.keys()):
+            entry = self.keymap.get(k)
+            if entry is None or entry.key_id in processed:
+                continue
+            keys = self.active_variants(entry=entry)
+            if not keys:
+                continue
+            processed.add(entry.key_id)
+            txt.append("{} : {}".format(" / ".join(keys), entry.description))
+        line = self.ui.show_help(txt)
+        self.refresh()
+        self.show_status(line)
+        return False
 
     def _refresh_cmd(self, line):
         self.invalidate = True
@@ -275,9 +314,9 @@ class GenericLister:
     def _register_builtins(self):
         self.register_key(self._quit_cmd, "Q", "q", "^]",
                           description="Quit")
-        self.register_key(self._down_cmd, "KEY_DOWN",
+        self.register_key(self._down_cmd, "KEY_DOWN", "^I",
                           description="Move down a row")
-        self.register_key(self._up_cmd, "KEY_UP",
+        self.register_key(self._up_cmd, "KEY_UP", "KEY_BTAB",
                           description="Move up a row")
         self.register_key(self._page_down_cmd, "KEY_SR",
                           description="Move down several row")
@@ -291,10 +330,13 @@ class GenericLister:
     def get_key(self):
         return self.ui.get_key()
 
-    def __call__(self, stdscr):
+    def __call__(self, stdscr, args=()):
         self.stdscr = stdscr
         self.stdscr.keypad(True)
-        self.logic.scan()
+        if args and hasattr(self.logic, "prepare"):
+            self.logic.prepare(*args)
+        if hasattr(self.logic, "scan"):
+            self.logic.scan()
         self.refresh()
         self.running = True
 
@@ -346,6 +388,9 @@ class GenericLister:
                 self.stdscr.refresh()
             else:
                 self.show_status("Unknown key: {}".format(ch))
+        if hasattr(self.logic, "return_value"):
+            return self.logic.return_value(self.active)
+        return None
 
     def move_to(self, line):
         old_active = self.active
@@ -378,10 +423,11 @@ class GenericLister:
 
 
 class KeyEntry:
-    def __init__(self, *, function, keys, prompt, arg, description, query):
+    def __init__(self, *, function, keys, prompt, arg, description, query, key_id):
         self.function = function
         self.keys = keys
         self.prompt = prompt
         self.arg = arg
         self.description = description
         self.query = query
+        self.key_id = key_id
