@@ -14,6 +14,7 @@ from .midinames import *
 from .errors import *
 
 DRUM_CHANNEL=9
+DRUM_VELOCITY=16
 
 class BackgroundDrums:
 
@@ -22,8 +23,9 @@ class BackgroundDrums:
         self.thread = None
         self.active = {}
         self.ui = None
-        self.paused = True
-        self.midifile = None
+        track = MidiTrack()
+        self.midifile = MidiFile()
+        self.midifile.tracks.append(track)
 
     def wire(self, *, push_player, **kwargs):
         self.player = push_player
@@ -35,6 +37,7 @@ class BackgroundDrums:
         if self.thread is None:
             self.thread = threading.Thread(target=self.runner, daemon=True)
             self.thread.start()
+            self.pause()
 
     def end(self):
         if self.queue is not None and self.thread is not None:
@@ -43,51 +46,36 @@ class BackgroundDrums:
 
     def runner(self):
         terminate = False
-        midifile = None
         while not terminate:
-            if midifile is None:
-                terminate, br = self._process_queue()
-            midifile = self.midifile
-            if midifile is not None:
-                for midi in midifile.play():
-                    self.player.feed_midi(midi)
+            try:
+                for midi in self.midifile.play():
                     if not self.queue.empty():
-                        terminate, br = self._process_queue()
-                        while self.paused:
-                            terminate, br = self._process_queue()
-                            if terminate or br:
-                                break
-                        if terminate or br:
-                            break
+                        while True:
+                            message = self.queue.get()
+                            self.queue.task_done()
+                            if message is None:
+                                terminate = True
+                                raise InterruptedError
+                            if isinstance(message, str):
+                                if message == "restart" or message == "start":
+                                    raise InterruptedError
+                                elif message == "pause":
+                                    pass
+                                elif message == "resume" or message == "play":
+                                    break
+                    self.player.feed_midi(midi)
+            except InterruptedError:
+                pass
         self.thread = None
         self.queue = None
-
-    def _process_queue(self):
-        message = self.queue.get()
-        self.queue.task_done()
-        if message is None:
-            return (True, True)
-        if isinstance(message, str):
-            if message == "restart" or message == "start":
-                self.paused = False
-                return (False, True)
-            elif message == "pause_resume":
-                if self.paused:
-                    self.paused = False
-                    return (False, False)
-                term = br = True
-                self.paused = True
-            elif message == "pause":
-                self.paused = True
-            elif message == "resume":
-                self.paused = False
-        return (False, False)
 
     def set_tempo(self, num, dem, tempo): 
         hihat = getNoteForName("hihat")
         pedalhihat = getNoteForName("pedalhihat")
         bassdrum = getNoteForName("bassdrum")
         snare = getNoteForName("snare")
+        sn = getNoteForName("sn")
+        ss = getNoteForName("ss")
         #a0 = "hh hh // hhp // bd"
         #b0 = "hh hh // hhp // sn"
         #c0 = "hh hh // hhp // bd bd"
@@ -95,14 +83,16 @@ class BackgroundDrums:
         a = [[hihat, hihat], pedalhihat, bassdrum]
         b = [[hihat, hihat], pedalhihat, snare]
         c = [[hihat, hihat], pedalhihat, [bassdrum, bassdrum]]
-        seq = [a, b, c, b, c, a]
+        s = [ss, ss, ss, ss]
+        seq = [s, s, s, s]
         self.set_pattern(num, dem, tempo, *seq)
 
     def set_pattern(self, num, dem, tempo, *seq):
         global DRUM_CHANNEL
-        self.track = MidiTrack()
-        self.midifile = MidiFile()
-        self.midifile.tracks.append(self.track) 
+        global DRUM_VELOCITY
+        track = MidiTrack()
+        newMidifile = MidiFile()
+        newMidifile.tracks.append(track)
         nexttime = 0
         notebucket = []
         basetime = 0
@@ -115,14 +105,14 @@ class BackgroundDrums:
                         mytempo = basetempo / len(items)
                         for i in range(len(items)):
                             note = items[i]
-                            notebucket.append(Message("note_on", channel=DRUM_CHANNEL, note=note, time= basetime + (mytempo * i)))
+                            notebucket.append(Message("note_on", channel=DRUM_CHANNEL, note=note, velocity=DRUM_VELOCITY, time= basetime + (mytempo * i)))
                             notebucket.append(Message("note_off", channel=DRUM_CHANNEL, note=note, time=basetime + (mytempo * (i + 1))))
                     else:
-                        notebucket.append(Message("note_on", channel=DRUM_CHANNEL, note=items, time=basetime))
+                        notebucket.append(Message("note_on", channel=DRUM_CHANNEL, note=items, velocity=DRUM_VELOCITY, time=basetime))
                         notebucket.append(Message("note_off", channel=DRUM_CHANNEL, note=items, time=basetime + basetempo) )
             else:
                 if s > 0:
-                    notebucket.append(Message("note_on", channel=DRUM_CHANNEL, note=s, time=basetime))
+                    notebucket.append(Message("note_on", channel=DRUM_CHANNEL, note=s, velocity=DRUM_VELOCITY, time=basetime))
                     notebucket.append(Message("note_off", channel=DRUM_CHANNEL, note=s, time=basetime + basetempo))
             basetime += basetempo
         notebucket.sort(key=lambda message: message.time)
@@ -135,16 +125,20 @@ class BackgroundDrums:
                 n = evt.time
                 evt.time = (n - start) / 1000
                 start = n
-            self.track.append(evt)
-
-    def play_pause(self):
-        self.queue.put("play-pause")
+            track.append(evt)
+        self.midifile = newMidifile
 
     def pause(self):
         self.queue.put("pause")
 
-    def is_stopped(self):
-        return self.paused
+    def resume(self):
+        self.queue.put("resume")
+
+    def stop(self):
+        self.queue.put("stop")
+
+    def play(self):
+        self.queue.put("play")
 
     def rewind(self):
         self.queue.put("restart")
@@ -152,7 +146,10 @@ class BackgroundDrums:
 class BackgroundNull:
 
     def __init__(self, config = None, player = None):
-        self.paused = True
+        pass
+
+    def wire(self, *, push_player, **kwargs):
+        pass
 
     def start(self):
         pass
@@ -169,18 +166,17 @@ class BackgroundNull:
     def set_pattern(self, num, dem, tempo, *seq):
         pass
 
-    def play_pause(self):
-        if self.paused:
-            self.paused = False
-        else:
-            self.paused = True
-        return self.paused
-
     def pause(self):
-        self.paused = True
+        pass
 
-    def is_stopped(self):
-        return self.paused
+    def resume(self):
+        pass
+
+    def stop(self):
+        pass
+
+    def play(self):
+        pass
 
     def rewind(self):
         pass
