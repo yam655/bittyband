@@ -284,7 +284,8 @@ def create(args):
 def panic(args):
     pbplayer = PushButtonPlayer(config)
     pbplayer.start()
-    cmds = Commands(config, pbplayer, None, None)
+    cmds = Commands(config)
+    cmds.wire(push_player=pbplayer, metronome=None)
     try:
         cmds.do_panic()
     finally:
