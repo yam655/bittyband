@@ -17,6 +17,7 @@ from ..exportly import ExportLy
 from ..exportmidi import ExportMidi
 from ..exporttxt import ExportTxt
 from ..commands import LEAD_CHANNEL, PAD_CHANNEL
+from .automate import Automate
 
 
 
@@ -277,23 +278,56 @@ class Importer:
         return True
 
     _chord_options = ["", "chord", "rest", "resume"]
+    _chord_mode = "progression"
+    _chord_selections = 2
     def _do_chord(self, *, line):
         datum = self.data[self.order[line]]
-        got = datum.get("chord-change","")
-        # if got == "":
-        #     for i in range(line - 1, -1, -1):
-        #         d = self.data[self.order[i]]
-        #         last = d.get("chord-change", "")
-        #         if last != "":
-        #             break
 
-        idx = self._chord_options.index(got)
-        idx += 1
-        if idx >= len(self._chord_options):
-            idx = 0
-        datum["chord-change"] = self._chord_options[idx]
-        self._need_propagate = True
+
+        if self._chord_mode == "progression":
+            got = datum.get("chord-change", "")
+            idx = self._chord_options.index(got)
+            idx += 1
+            if idx >= len(self._chord_options):
+                idx = 0
+            datum["chord-change"] = self._chord_options[idx]
+        elif self._chord_mode == "selection":
+            idx = datum.get("chord-selection", 0)
+            if idx == "":
+                idx = -1
+            else:
+                idx = int(idx)
+            idx += 1
+            if idx >= self._chord_selections:
+                idx = 0
+            datum["chord-selection"] = idx
+
+        datum["chord_ui"] = "??"
         self.spreader.refresh_line(line)
+        self._need_propagate = True
+        self.changed = True
+        return True
+
+    def _do_chord_backwards(self, *, line):
+        datum = self.data[self.order[line]]
+
+
+        if self._chord_mode == "progression":
+            return self._do_chord(line=line)
+        elif self._chord_mode == "selection":
+            idx = datum.get("chord-selection", 0)
+            if idx == "":
+                idx = -1
+            else:
+                idx = int(idx)
+            idx -= 1
+            if idx < 0:
+                idx = self._chord_selections - 1
+            datum["chord-selection"] = idx
+
+        datum["chord_ui"] = "??"
+        self.spreader.refresh_line(line)
+        self._need_propagate = True
         self.changed = True
         return True
 
@@ -309,13 +343,21 @@ class Importer:
             this_track = self.find_song_data(-1)
         self.song_data[-1] = this_track
         chord_values = this_track["pad_chord_seq"]
+        chord_names = this_track.get("pad_sequence","").split("-")
+        chord_selections = this_track.get("pad_selections","").split()
+        chord_data = this_track.get("pad_chords_parsed",{})
         last_mark = -1
         idx = -1
         for location in self.order:
             idx += 1
             datum = self.data.get(location)
             next_track = datum.get("track-change", "")
-            next_chord = datum.get("chord-change", "")
+            next_chidx = None
+            next_chord = None
+            if self._chord_mode == "progression":
+                next_chord = datum.get("chord-change", "")
+            else:
+                next_chidx = datum.get("chord-selection", 0)
             mark = datum.get("mark","")
             if mark != "":
                 if mark[0] not in ".-*@+=: ":
@@ -343,6 +385,9 @@ class Importer:
                 this_track = self.find_song_data(self._tracks[-1])
                 self.song_data[self._tracks[-1]] = this_track
                 chord_values = this_track["pad_chord_seq"]
+                chord_names = this_track.get("pad_sequence", "").split("-")
+                chord_selections = this_track.get("pad_selections", "").split()
+                chord_data = this_track.get("pad_chords_parsed", {})
             elif next_track == "crap":
                 last_track = next_track
                 datum["track_ui"] = "- -"
@@ -356,10 +401,51 @@ class Importer:
                     datum["track_id"] = self._tracks[-1]
                     datum["track_ui"] = "+{:02d}".format(len(self._tracks))
                     last_track = "track"
-            if next_chord == "":
+
+            if next_chord == None:
+                if next_chidx == "":
+                    ch = "r"
+                    if 0 <= chord_idx < len(chord_selections) -1:
+                        ch = chord_selections[chord_idx]
+                    if ch == "" or ch == "_" or ch == '"':
+                        ch = "r"
+                    if ch == "r":
+                        datum["chord_value"] = tuple()
+                    else:
+                        datum["chord_value"] = None
+                    datum["chord_ui"] = " " + ch
+                elif isinstance(next_chidx, (int, float)) or next_chidx.isnumeric():
+                    idx = next_chidx
+                    if isinstance(next_chidx, (str, float)):
+                        idx = int(next_chidx)
+                    ch = None
+                    if len(chord_selections) > 0:
+                        ch = chord_selections[idx % len(chord_selections)]
+                    if ch is None:
+                        datum["chord_ui"] = " "
+                        datum["chord_value"] = tuple()
+                    elif ch == "" or ch == "_" or ch == '"':
+                        idx = chord_idx
+                        ch = chord_selections[idx % len(chord_selections)]
+                        if ch == "r":
+                            datum["chord_ui"] = " r"
+                        else:
+                            datum["chord_ui"] = " " + ch
+                        datum["chord_value"] = None
+                    elif ch == "r":
+                        chord_idx = idx
+                        datum["chord_ui"] = "-r"
+                        datum["chord_value"] = tuple()
+                    else:
+                        chord_idx = idx
+                        datum["chord_ui"] = ">"+ ch
+                        datum["chord_value"] = chord_data[ch]
+                else:
+                    raise ValueError(repr(next_chidx))
+            elif next_chord == "":
                 if last_chord == "chord":
                     datum["chord_value"] = None
-                    datum["chord_ui"] = " * "
+                    datum["chord_ui"] = " " + chord_names[chord_idx]
                 elif last_chord == "rest":
                     datum["chord_value"] = None
                     datum["chord_ui"] = " : "
@@ -369,16 +455,19 @@ class Importer:
                 if chord_idx >= len(chord_values):
                     chord_idx = 0
                 datum["chord_value"] = chord_values[chord_idx]
-                datum["chord_ui"] = ">*<"
+                datum["chord_ui"] = ">" + chord_names[chord_idx]
             elif next_chord == "rest":
                 last_chord = next_chord
                 datum["chord_value"] = tuple()
                 datum["chord_ui"] = "-:-".format(len(self._tracks))
             elif next_chord == "resume":
                 datum["chord_value"] = chord_values[chord_idx]
-                datum["chord_ui"] = "}+{"
+                datum["chord_ui"] = "}" + chord_names[chord_idx]
                 last_chord = "chord"
         self.metadata["audio"]["tracks"] = str(len(self._tracks))
+        self._chord_selections = 0
+        old_mode = self._chord_mode
+        self._chord_mode = "progression"
         for t in self._tracks:
             if str(t) not in self.metadata:
                 self.metadata.add_section(str(t))
@@ -386,6 +475,15 @@ class Importer:
             if self.data[t].get("mark","") == "":
                 self.data[t]["mark"] = "Track @{}".format(human_duration(t,0))
             self.metadata[str(t)]["title"] = self.data[t]["mark"]
+            selection = self.metadata[str(t)].get("pad_selections","")
+            if selection != "":
+                c = len(selection.strip().split())
+                if c != 0:
+                    self._chord_mode = "selection"
+                    if c > self._chord_selections:
+                        self._chord_selections = c
+        if old_mode != self._chord_mode:
+            self._propagate()
 
     def parse_timecode(self, *, timecode, line):
         if timecode is None or timecode.strip() == "":
@@ -835,6 +933,10 @@ class Importer:
         self.spreader.show_status("Done...")
         return False
 
+    def _do_automate(self, *, line):
+        Automate().process(self)
+        return False
+
     def _do_backup(self, *, line):
         self.backup()
         self.spreader.show_status("Backup complete.")
@@ -862,6 +964,7 @@ class Importer:
             "/" : change the line separator indicator in the lyrics
             ";" - sample the lead note
             ":" : repeat the marked section
+            'a' / 'A' : automate
             'C' / 'c' : change the chord
             'D' / 'd' : delete row
             'E' / 'e' : export to MIDI
@@ -899,7 +1002,9 @@ class Importer:
                               description="Enter lyric for this note")
         spreader.register_key(self._do_mark, "M", "m", arg="?str", prompt="How would you like to mark it?",query=True,
                               description="Mark this segment with some text.")
-        spreader.register_key(self._do_chord, "c", "C",
+        spreader.register_key(self._do_chord, "c",
+                              description="Change the chord")
+        spreader.register_key(self._do_chord_backwards, "C",
                               description="Change the chord")
         spreader.register_key(self._do_play_chords, "h", "H",
                               description="Play just the chords")
@@ -952,6 +1057,8 @@ class Importer:
                               description="Swap data with line above")
         spreader.register_key(self._do_swap_down, "w",
                               description="Swap data with line below")
+        spreader.register_key(self._do_automate, "a", "A",
+                              description="Automate finding the notes")
 
     def scan(self):
         self.import_file = self.config["instance"]["import-file"]
@@ -973,15 +1080,19 @@ class Importer:
         self.update_order()
         self.clean()
 
-    def add_row(self, location, *, mark="", lyric=""):
+    def add_row(self, location, *, mark="", lyric="", note=""):
         if location in self.data:
             raise IndexError("location {} already present in data".format(location))
         if self.order and location > self.order[-1]:
-            raise IndexError("location {} can't be bigger than file".format(location))
+            if int(location) != int(self.order[-1]):
+                raise IndexError("location {} can't be bigger than file: {}".format(location, self.order[-1]))
         if location < 0:
             raise IndexError("location {} can't be less than zero".format(location))
+        note_ui = "-"
+        if note != "":
+            note_ui = getLyForMidiNote(note)
         row = {"location":location, "mark":mark, "lyric":lyric, "track_ui":"", "chord_ui":"",
-               "chord-change":"", "track-change":"", "note":"", "note_ui":"-"}
+               "chord-change":"", "chord-selection": 0, "track-change":"", "note":note, "note_ui":note_ui}
         self.data[location]  = row
         return row
 
@@ -997,6 +1108,7 @@ class Importer:
         for r in self.data.values():
             r.setdefault("lyric", "")
             r.setdefault("chord-change", "")
+            r.setdefault("chord-selection", 0)
             r.setdefault("track-change", "")
             r.setdefault("note", "")
             note = r.get("note", "")
@@ -1032,7 +1144,7 @@ class Importer:
         if not self.changed:
             return
         with self.data_file.open("w", newline='') as csvfile:
-            fieldnames = ['location', 'lyric', 'mark', 'track-change', "chord-change", "note"]
+            fieldnames = ['location', 'lyric', 'mark', 'track-change', "chord-change", "chord-selection", "note"]
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction='ignore', dialect=ImportCsvDialect)
             writer.writeheader()
             for location in self.order:
@@ -1049,7 +1161,7 @@ class Importer:
         backup_data = self.data_file.with_name("{}-{}{}".format(self.data_file.stem, suffix, self.data_file.suffix))
         backup_meta = meta_file.with_name("{}-{}{}".format(meta_file.stem, suffix, meta_file.suffix))
         with backup_data.open("w", newline='') as csvfile:
-            fieldnames = ['location', 'lyric', 'mark', 'track-change', "chord-change", "note"]
+            fieldnames = ['location', 'lyric', 'mark', 'track-change', "chord-change", "chord-selection", "note"]
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction='ignore', dialect=ImportCsvDialect)
             writer.writeheader()
             for location in self.order:
@@ -1059,12 +1171,12 @@ class Importer:
 
     def get_line(self, what, max_len):
         datum = self.data[what]
-        padout=max_len - 23
+        padout=max_len - 25
         marklen = int(padout // 3)
         lyrlen = int(padout * 2 // 3)
         loc = human_duration(datum["location"], floor=3)
         lyrlen -= len(loc) - 9
-        return "{human_time} {note_ui:5.5} {lyric:{lyrlen}.{lyrlen}} {chord_ui: >3.3} {track_ui: >3.3} {mark:{marklen}.{marklen}}".format(
+        return "{human_time} {note_ui:5.5} {lyric:{lyrlen}.{lyrlen}} {chord_ui:5.5} {track_ui: >3.3} {mark:{marklen}.{marklen}}".format(
             marklen=marklen, lyrlen=lyrlen,
             human_time=loc, **datum)
 
@@ -1092,6 +1204,7 @@ class Importer:
         out["pad_chords"] = basis.get("pad_chords", "1")
         out["pad_sequence"] = basis.get("pad_sequence", "I")
         out["pad_velocity"] = str(basis.get("pad_velocity", 64))
+        out["pad_selections"] = basis.get("pad_selections","")
 
 
 
