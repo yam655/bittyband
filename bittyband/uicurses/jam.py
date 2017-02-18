@@ -15,7 +15,7 @@ class JamScreen:
         self.command_log = push_recorder
         self.ui = ui
 
-    def __call__(self, stdscr):
+    def __call__(self, stdscr, args=()):
         stdscr.keypad(True)
         stdscr.scrollok(True)
 
