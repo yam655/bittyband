@@ -199,7 +199,7 @@ class ImportLister:
             return
         self.data = {}
         sortable_order = []
-        for f in import_dir.glob("*.[mMfF][pPlL]*[3cC]"):
+        for f in import_dir.glob("*.[mM][pP]3"):
             metadata_file = f.with_suffix(".meta")
             lyrics_file = f.with_suffix(".txt")
             media_file = f.resolve()
