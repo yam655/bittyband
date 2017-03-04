@@ -23,6 +23,7 @@ class Automate:
         # ignore frames under this level (dB)
         notes_o.set_silence(-40)
         popularity = {}
+        last_rest = False
 
         while True:  # reading loop
             samples, read = source()
@@ -38,12 +39,28 @@ class Automate:
 
             location = total_frames / float(samplerate)
             if (new_note[0] != 0):
+                last_rest = False
                 midi_note = int(new_note[0])
-                popularity.setdefault(midi_note % 12, 0)
-                popularity[midi_note % 12] += 1
-                importer.add_row(location, mark=mark, note=midi_note)
+                if midi_note >= 96:
+                    midi_note = ""
+                else:
+                    popularity.setdefault(midi_note % 12, 0)
+                    popularity[midi_note % 12] += 1
+                if location in importer.data:
+                    importer.data[location]["note"] = midi_note
+                    if mark:
+                        importer.data[location]["mark"] = mark
+                else:
+                    importer.add_row(location, mark=mark, note=midi_note)
             elif new_note[2] != 0:
-                importer.add_row(location, mark=mark, note="")
+                if location in importer.data:
+                    importer.data[location]["note"] = ""
+                    if mark:
+                        importer.data[location]["mark"] = mark
+                    last_rest = True
+                elif not last_rest:
+                    importer.add_row(location, mark=mark, note="")
+                    last_rest = True
 
             total_frames += read
             if read < HOP_SIZE: break

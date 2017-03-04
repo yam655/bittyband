@@ -109,6 +109,15 @@ class UiCurses:
             curses.ungetch("Q")
         return ret
 
+    def switch_beater_file(self, filename, stdscr = None):
+        if stdscr is None and len(self.stdscrs) > 0:
+            stdscr = self.stdscrs[-1]
+        ret = self._switch(stdscr, Spreader, logic="beater", args=(filename, ))
+        if len(self.stdscrs) > 0:
+            # curses.ungetch(ord("L") - ord("@"))
+            curses.ungetch("Q")
+        return ret
+
     def show_help(self, txt, *, stdscr = None):
         if self.help is None:
             return "Help isn't available on this system."

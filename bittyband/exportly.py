@@ -223,10 +223,7 @@ class ExportLy:
         self.filenm = filenm
         self.reconfigure(config)
         self.lilies = []
-        self.lily = LilypondFile()
-        self.lilies.append(self.lily)
-        if title is not None:
-            self.lily.title = title
+        self.new_track(title=title)
         self.sync_count = 0
         self.lead_time = 0
         self.pad_time = 0

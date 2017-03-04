@@ -90,6 +90,9 @@ class ImportLister:
         self.config["instance"]["import-file"] = self.order[line]
         self.ui.switch_import_file()
 
+    def _do_beater(self, *, line):
+        self.ui.switch_beater_file(self.order[line])
+
     def _do_export_midi(self, filename, line):
         if filename is None or len(filename.strip()) == 0:
             self.export_midi(self.get_order()[line],
@@ -151,6 +154,8 @@ class ImportLister:
                             description="Play this file.")
         lister.register_key(self._do_importer, "I", "i", "^J",
                             description="Import this file")
+        lister.register_key(self._do_beater, "b", "B",
+                            description="Process with the beater.")
         lister.register_key(self._do_export_midi, "E", "e", "M", "m", arg="?str",
                             prompt="Export to MIDI (^G to cancel; ENTER to name '$BASENAME.midi'.]",
                             description="Export to MIDI")

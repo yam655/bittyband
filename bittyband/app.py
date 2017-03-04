@@ -2,6 +2,8 @@
 
 import sys
 
+from .beater import BeatPlayer
+from .beater import Beater
 from .simplehelp import SimpleHelp
 from .importer import CsvPlayer
 from .commands import Commands
@@ -37,7 +39,9 @@ def app(config):
 
     elif config["instance"]["mode"] == "import":
         wiring["import_lister"] = ImportLister(config)
+        wiring["beat_player"] = BeatPlayer(config)
         wiring["importer"] = Importer(config)
+        wiring["beater"] = Beater(config)
         wiring["csv_player"] = CsvPlayer(config)
         need_for_mode = ["push_player", "csv_player"]
         mode = ui.start_import
