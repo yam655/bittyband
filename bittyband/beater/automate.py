@@ -3,8 +3,17 @@
 import numpy
 import aubio
 
+from ..midinames import getLyForMidiNote
+
 HOP_SIZE = 256
 
+chordies = {
+    {"c", "e", "g"}: 'c',
+
+}
+
+def nameForLimitedNote(note):
+    return getLyForMidiNote(note + 60)
 
 class Automate:
     def __init__(self):
@@ -41,6 +50,8 @@ class Automate:
             beat_box.add_note(location, *new_note)
             last_beat["notes"].append(location)
 
+            if read < HOP_SIZE:
+                last_beat["end-loc"] = location
             total_frames += read
             if read < HOP_SIZE: break
 
@@ -84,14 +95,19 @@ class Automate:
                 block_lengths[o] = d
             else:
                 block_lengths[d] += d
-        top = [(-1, -1), (-1, -1), (-1, -1)]
+        top = []
+        dropkeys = []
         for k, v in note_lengths.items():
-            if v > top[0][1]:
-                top.insert(0, (k, v))
-            elif v > top[1][1]:
-                top.insert(1, (k, v))
-            elif v > top[2][1]:
-                top.insert(2, (k, v))
-            else:
+            if v < (end - start) / 10:
+                dropkeys.append(k)
                 continue
-            del top[-1]
+            for i in range(len(top)):
+                if v > top[i][1]:
+                    top.insert(i, (k, v))
+                    break
+            else:
+                top.append((k, v))
+        for k in dropkeys:
+            del note_lengths[k]
+        beat["important-notes"] = top
+        beat["chord"] = top[0:3]
